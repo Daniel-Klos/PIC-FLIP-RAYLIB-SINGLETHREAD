@@ -352,7 +352,7 @@ struct SceneHandler {
         if (IsKeyPressed(KEY_U)) {
             fluid_attributes.setStep(true);
         }
-        if (IsKeyPressed(KEY_Q)) {
+        /*if (IsKeyPressed(KEY_Q)) {
             std::cout << 
             "Fill Grid: " << getFillGridTime() << "\n" <<
             "Miscellaneous: " << getMiscellaneousTime() << "\n" <<
@@ -368,7 +368,7 @@ struct SceneHandler {
             //"Before Sim Step: " << beforeSimStep << "\n" <<
             //"After Sim Step: " << afterSimStep << "\n";
             CloseWindow();
-        }
+        }*/
         /*end = std::chrono::high_resolution_clock::now();
         duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
         addValueToAverage(afterSimStep, duration.count(), numDT);*/
