@@ -74,16 +74,42 @@ public:
 
 private:
 
-    float Weight(float distX, float distY) {
-        return distX * distY;
+    void GetGridPositions(float px, float py, int& x0, int& x1, int& y0, int& y1, int component) {
+        // set first argument to 0 if you want fluid touching left wall to go down
+        x0 = std::max(1, std::min(static_cast<int>(std::floor(px * invSpacing)), fluid_attributes.numX - 2));
+        x1 = std::min(x0 + 1, fluid_attributes.numX - 2);
+    
+        y0 = std::max(0, std::min(static_cast<int>(std::floor(py * invSpacing)), fluid_attributes.numY - 2));
+        y1 = std::min(y0 + 1, fluid_attributes.numY - 1);
+
+        // this stops the fluid touching the left wall from going down
+        if (component == 0 && x0 == 1) { // ceiling
+            x0 = x1;
+        }
+        if (component == 1 && x0 == 1) { // left wall
+            x1 = x0;
+        }
     }
 
-    float WeightDerivative(bool positive) {
-        return -1.f + 2.f * positive;
+    float Weight(float px, float py, float gx, float gy) {
+        gx *= fluid_attributes.cellSpacing;
+        gy *= fluid_attributes.cellSpacing;
+
+        float dx = 1.f - std::abs((px - gx)) * invSpacing;
+        float dy = 1.f - std::abs((py - gy)) * invSpacing;
+
+        return dx * dy;
+    }
+
+    void WeightDerivative(float px, float py, float gx, float gy, float& gradX, float& gradY) {
+        float eps = fluid_attributes.cellSpacing * 0.001f;
+
+        gradX = (Weight(px + eps, py, gx, gy) - Weight(px - eps, py, gx, gy)) / (2 * eps);
+        gradY = (Weight(px, py + eps, gx, gy) - Weight(px, py - eps, gx, gy)) / (2 * eps);
     }
 
     // add RKstep as a parameter
-    void cacheWeightsAt(int pIdx, int component) {
+    void cacheGridInfoAt(int pIdx, int component) {
         const float dx = (component == 1) * halfSpacing;
         const float dy = (component == 0) * halfSpacing;
 
@@ -93,23 +119,16 @@ private:
         px = clamp(px, fluid_attributes.cellSpacing, (fluid_attributes.numX - 1) * fluid_attributes.cellSpacing);
         py = clamp(py, fluid_attributes.cellSpacing, (fluid_attributes.numY - 1) * fluid_attributes.cellSpacing);
 
-        // set first argument to 0 if you want fluid touching left wall to go down
-        int x0 = std::max(1, std::min(static_cast<int>(std::floor((px - dx) * invSpacing)), fluid_attributes.numX - 2));
-        int x1 = std::min(x0 + 1, fluid_attributes.numX - 2);
-        
-        int y0 = std::max(0, std::min(static_cast<int>(std::floor((py - dy) * invSpacing)), fluid_attributes.numY - 2));
-        int y1 = std::min(y0 + 1, fluid_attributes.numY - 1);
+        px -= dx;
+        py -= dy;
 
-        // this stops the fluid touching the left wall from going down
-        if (component == 0 && x0 == 1) { // ceiling
-            x0 = x1;
-        }
-        if (component == 1 && x0 == 1) { // left wall
-            x1 = x0;
-        }
+        int x0, x1, y0, y1;
+        x0 = x1 = y0 = y1 = 0;
 
-        float dxLeft = ((px - dx) - x0 * fluid_attributes.cellSpacing) * invSpacing;
-        float dyTop = ((py - dy) - y0 * fluid_attributes.cellSpacing) * invSpacing;
+        GetGridPositions(px, py, x0, x1, y0, y1, component);
+
+        float dxLeft = (px - x0 * fluid_attributes.cellSpacing) * invSpacing;
+        float dyTop = (py - y0 * fluid_attributes.cellSpacing) * invSpacing;
         float dxRight = 1.f - dxLeft;
         float dyBottom = 1.f - dyTop;
 
@@ -120,10 +139,15 @@ private:
 
         int gIdx = 2 * pIdx + component;
     
-        topLeftWeights[gIdx] = Weight(dxRight, dyBottom); //* fluid_attributes.masses[pIdx];
-        topRightWeights[gIdx] = Weight(dxLeft, dyBottom); //* fluid_attributes.masses[pIdx];
-        bottomLeftWeights[gIdx] = Weight(dxRight, dyTop); //* fluid_attributes.masses[pIdx];
-        bottomRightWeights[gIdx] = Weight(dxLeft, dyTop); //* fluid_attributes.masses[pIdx];
+        topLeftWeights[gIdx] = Weight(px, py, x0, y0); // * fluid_attributes.masses[pIdx];
+        topRightWeights[gIdx] = Weight(px, py, x1, y0); // * fluid_attributes.masses[pIdx];
+        bottomLeftWeights[gIdx] = Weight(px, py, x0, y1); // * fluid_attributes.masses[pIdx];
+        bottomRightWeights[gIdx] = Weight(px, py, x1, y1); // * fluid_attributes.masses[pIdx];
+
+        topLeftWeightXDerivs[gIdx] = WeightDerivative(px, py, x0, y0, );
+        topRightWeightXDerivs[gIdx] = WeightDerivative(px, py, x1, y0);
+        bottomLeftWeightXDerivs[gIdx] = WeightDerivative(px, py, x0, y1);
+        bottomRightWeightXDerivs[gIdx] = WeightDerivative(px, py, x1, y1);
 
         topLeftCells[gIdx] = x0 * n + y0;
         topRightCells[gIdx] = x1 * n + y0;
@@ -134,7 +158,7 @@ private:
     // make topLeftCell a vector of arrays of size whatever RK you need
     void cacheTransferNodes(int32_t start, int32_t end, int32_t component) {
         for (int32_t i = start; i < end; ++i) {
-            cacheWeightsAt(i, component);
+            cacheGridInfoAt(i, component);
         }
     }
 
@@ -465,27 +489,8 @@ private:
                 fluid_attributes.velocities[ui] = (1.f - fluid_attributes.flipRatio) * picV + fluid_attributes.flipRatio * flipV;
             }
 
-            float dxLeft = fluid_attributes.dxLefts[i].vu[1];
-            float dyTop = fluid_attributes.dyTops[i].vu[1];
-            float dxRight = fluid_attributes.dxRights[i].vu[1];
-            float dyBottom = fluid_attributes.dyBottoms[i].vu[1];
-
-            float dudx = 0.f;
-            float dudy = 0.f;
-
-            float invS = fluid_attributes.invSpacing;
-
-            dudx += (dyTop * invS - invS) * gridVel_topLeft;
-            dudy += (dxLeft * invS - invS) * gridVel_topLeft;
-
-            dudx += (-dyTop * invS + invS) * gridVel_topRight;
-            dudy += (-dxRight * invS) * gridVel_topRight;
-
-            dudx += (-dyBottom * invS) * gridVel_bottomLeft;
-            dudy += (-dxLeft * invS + invS) * gridVel_bottomLeft;
-
-            dudx += (dyBottom * invS) * gridVel_bottomRight;
-            dudy += (dxRight * invS) * gridVel_bottomRight;
+            // c11, c12
+            // need all weights, grid velocities
         
             fluid_attributes.affineMats[matIdx] = dudx;
             fluid_attributes.affineMats[matIdx + 1] = dudy;
@@ -545,27 +550,7 @@ private:
                 fluid_attributes.velocities[vi] = (1.f - fluid_attributes.flipRatio) * picV + fluid_attributes.flipRatio * flipV;
             }
 
-            float dxLeft = fluid_attributes.dxLefts[i].vu[0];
-            float dyTop = fluid_attributes.dyTops[i].vu[0];
-            float dxRight = fluid_attributes.dxRights[i].vu[0];
-            float dyBottom = fluid_attributes.dyBottoms[i].vu[0];
-
-            float dvdx = 0.f;
-            float dvdy = 0.f;
-
-            float invS = fluid_attributes.invSpacing;
-
-            dvdx += (dyTop * invS - invS) * gridVel_topLeft;
-            dvdy += (dxLeft * invS - invS) * gridVel_topLeft;
-
-            dvdx += (-dyTop * invS + invS) * gridVel_topRight;
-            dvdy += (-dxRight * invS) * gridVel_topRight;
-
-            dvdx += (-dyBottom * invS) * gridVel_bottomLeft;
-            dvdy += (-dxLeft * invS + invS) * gridVel_bottomLeft;
-
-            dvdx += (dyBottom * invS) * gridVel_bottomRight;
-            dvdy += (dxRight * invS) * gridVel_bottomRight;
+            // c21, c22
         
             fluid_attributes.affineMats[matIdx + 2] = dvdx;
             fluid_attributes.affineMats[matIdx + 3] = dvdy;

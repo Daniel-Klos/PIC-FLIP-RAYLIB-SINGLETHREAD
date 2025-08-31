@@ -15,12 +15,7 @@ struct SceneHandler {
     ObstacleHandler obstacle_handler;
     FluidHandler fluid_handler;
 
-    float mouseX;
-    float mouseY;
-
     int frame = 0;
-    float trueDT;
-    float setDT;
     int fps;
 
     float steps = 0.f;
@@ -59,7 +54,7 @@ struct SceneHandler {
           fluid_handler(fas, scene_renderer.fluid_renderer)
     {
         fluid_attributes.frame_context.maxFps = maxFps;
-        setDT = 1.f / maxFps;
+        fluid_attributes.frame_context.setDT = 1.f / maxFps;
         SetTargetFPS(maxFps);
 
         // initialize obstacle positions
@@ -112,20 +107,21 @@ struct SceneHandler {
     }
 
     void simulate() {
-        trueDT = GetFrameTime();
-        trueDT = std::max(trueDT, setDT);
+        fluid_attributes.frame_context.trueDT = GetFrameTime();
+        fluid_attributes.frame_context.trueDT = std::max(fluid_attributes.frame_context.trueDT, fluid_attributes.frame_context.setDT);
 
         Vector2 mouse_position = GetMousePosition();
 
         fluid_attributes.frame_context.screen_mouse_pos = Vector2{static_cast<float>(mouse_position.x), static_cast<float>(mouse_position.y)};
         fluid_attributes.frame_context.world_mouse_pos = scene_renderer.screenToWorld(fluid_attributes.frame_context.screen_mouse_pos);
 
-        fluid_attributes.frame_context.dt = setDT;
+        fluid_attributes.frame_context.dt = fluid_attributes.frame_context.setDT;
 
         track_key_events();
         track_mouse_events();
             
         if (!fluid_attributes.stop || fluid_attributes.step) {
+            std::copy(begin(fluid_attributes.positions), end(fluid_attributes.positions), begin(fluid_attributes.renderPositions));
             update_environment();
             fluid_attributes.step = false;
         }
@@ -425,7 +421,7 @@ struct SceneHandler {
     void displayGUI() {
         // reset fps tracker every 20 frames
         if (frame == 0) {
-            fps = 1 / trueDT;
+            fps = 1 / fluid_attributes.frame_context.trueDT;
             frame = 20;
         }
         frame--;
@@ -446,10 +442,10 @@ struct SceneHandler {
 
         // controls
         if (showControls) {
-            std::string flip_ratio_str = "PIC/FLIP Ratio (S/B):    " + std::to_string(fluid_attributes.getFlipRatio());
+            std::string flip_ratio_str = "Viscosity (S/B):    " + std::to_string(1.f - fluid_attributes.getFlipRatio());
             DrawTextNearRightWall(flip_ratio_str, showControlsHEIGHT);
 
-            std::string vorticity_confinement_str = "Vorticity Confinement (W/E):    " + std::to_string(fluid_attributes.getVorticityStrength());
+            std::string vorticity_confinement_str = "Swirl Enhancement (W/E):    " + std::to_string(fluid_attributes.getVorticityStrength());
             DrawTextNearRightWall(vorticity_confinement_str, showControlsHEIGHT * 2.5);
 
             std::string gravityX_str = "Gravity X (H/M):    " + std::to_string(static_cast<int>(fluid_attributes.getGravityX()));

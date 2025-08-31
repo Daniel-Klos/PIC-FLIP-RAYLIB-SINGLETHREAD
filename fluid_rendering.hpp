@@ -13,7 +13,11 @@ public:
 
     int GetNumMeshesFrom(int numParticles);
 
-public:
+    float lerp(float a, float b, float alpha);
+
+    float CalculateInterpolation();
+
+    void InterpolatePositions(float alpha);
 
     FluidRenderer(FluidState &fas);
     ~FluidRenderer();
@@ -60,7 +64,7 @@ public:
     float invSpacing;
     int32_t renderPattern = 1;
 
-    float diffusionRatio = 0.75f;
+    float diffusionRatio = 0.75f; // 0.75
     
     Material particleMaterial = {0};
     Texture2D particleTexture = {0};

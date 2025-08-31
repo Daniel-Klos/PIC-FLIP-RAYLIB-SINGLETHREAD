@@ -6,7 +6,7 @@ struct PressureSolver {
     FluidState &fluid_attributes;
     int n;
     int gridSize;
-    int numPressureIters = 30;
+    int numPressureIters = 40;
     int FLUID_CELL = fluid_attributes.FLUID_CELL;
     int AIR_CELL = fluid_attributes.AIR_CELL;
     int SOLID_CELL = fluid_attributes.SOLID_CELL;

@@ -4,6 +4,8 @@
 
 struct FrameContext {
     float dt;
+    float trueDT;
+    float setDT;
     int maxFps;
     
     bool leftMouseDown = false;

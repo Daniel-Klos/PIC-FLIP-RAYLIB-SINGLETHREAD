@@ -18,11 +18,6 @@ class FluidHandler {
     float moveDist;
     float checkSeparationDist;
 
-    float dragObjectX;
-    float dragObjectY;
-    float dragObjectPrevX;
-    float dragObjectPrevY;
-
 public:
 
     const float colorDiffusionCoeff = 0.001f;
@@ -88,6 +83,8 @@ public:
             fluid_attributes.positions[2 * i + 1] += fluid_attributes.velocities[2 * i + 1] * fluid_attributes.frame_context.dt;
             fluid_attributes.velocities[2 * i] += fluid_attributes.gravityX * fluid_attributes.frame_context.dt;
             fluid_attributes.velocities[2 * i + 1] += fluid_attributes.gravityY * fluid_attributes.frame_context.dt;
+
+            fluid_attributes.particleAges[i] = std::min(fluid_attributes.age_constant, fluid_attributes.particleAges[i] + 1);
 
             /*if (fluid_attributes.densities[i] > 0) {
                 float buoyancy = fluid_attributes.gravityY * (1 - (fluid_attributes.particle_densities[i] / fluid_attributes.densities[i]));
@@ -290,21 +287,23 @@ public:
     void includeDragObject() {
         // Bug when you hold force object attract then switch to drag object while holding mouse down
         const float extend = (20 * fluid_attributes.cellSpacing) / fluid_attributes.frame_context.zoom_amount;
-        if (fluid_attributes.frame_context.leftMouseDown) {
-            dragObjectX = fluid_attributes.frame_context.world_mouse_pos.x;
-            dragObjectY = fluid_attributes.frame_context.world_mouse_pos.y;
-            float vx = (dragObjectX - dragObjectPrevX) * fluid_attributes.frame_context.maxFps * !fluid_attributes.frame_context.justPressed;
-            float vy = (dragObjectY - dragObjectPrevY) * fluid_attributes.frame_context.maxFps * !fluid_attributes.frame_context.justPressed;
-            int objectCellX = dragObjectX / fluid_attributes.cellSpacing;
-            int objectCellY = dragObjectY / fluid_attributes.cellSpacing;
+        if (fluid_attributes.frame_context.leftMouseDown || fluid_attributes.frame_context.rightMouseDown) {
+            float objectX = fluid_attributes.frame_context.world_mouse_pos.x;
+            float objectY = fluid_attributes.frame_context.world_mouse_pos.y;
+            float objectPrevX = fluid_attributes.frame_context.prev_world_mouse_pos.x;
+            float objectPrevY = fluid_attributes.frame_context.prev_world_mouse_pos.y;
+            float vx = (objectX - objectPrevX) * fluid_attributes.frame_context.maxFps * !fluid_attributes.frame_context.justPressed;
+            float vy = (objectY - objectPrevY) * fluid_attributes.frame_context.maxFps * !fluid_attributes.frame_context.justPressed;
+            int objectCellX = objectX / fluid_attributes.cellSpacing;
+            int objectCellY = objectY / fluid_attributes.cellSpacing;
             int objectCellRadius = std::ceil(objectSimRadius / fluid_attributes.cellSpacing);
             for (int i = objectCellX - objectCellRadius; i < objectCellX + objectCellRadius; i++) {
                 for (int j = objectCellY - objectCellRadius; j < objectCellY + objectCellRadius; j++) {
                     int cellNr = i * fluid_attributes.n + j;
                     bool notInBounds = i < 0 || i > fluid_attributes.numX || j < 0 || j > fluid_attributes.numY;
                     if (notInBounds || (fluid_attributes.cellType[i * fluid_attributes.n + j] == fluid_attributes.SOLID_CELL)) continue;
-                    float dx = (i + 0.5) * fluid_attributes.cellSpacing - dragObjectX;
-                    float dy = (j + 0.5) * fluid_attributes.cellSpacing - dragObjectY;
+                    float dx = (i + 0.5) * fluid_attributes.cellSpacing - objectX;
+                    float dy = (j + 0.5) * fluid_attributes.cellSpacing - objectY;
 
                     if (dx * dx + dy * dy < objectSimRadius * objectSimRadius + extend) {
                         
@@ -323,13 +322,11 @@ public:
                     }
                 }
             }
-            dragObjectPrevX = dragObjectX;
-            dragObjectPrevY = dragObjectY;
         }
     }
 
     void generate() {
-        float separation = fluid_attributes.radius * 2.1;
+        float separation = fluid_attributes.radius * 2.f;
         int wideNum = std::floor((2 * objectSimRadius) / (separation));
         int highNum = wideNum;
         int numPotentiallyAdded = wideNum * highNum;
@@ -347,6 +344,7 @@ public:
         int maxPossibleParticles = originalParticleCount + numPotentiallyAdded;
 
         fluid_attributes.positions.resize(2 * maxPossibleParticles);
+        fluid_attributes.renderPositions.resize(2 * maxPossibleParticles);
         int addedTo = 0;
 
         for (int i = 0; i < numPotentiallyAdded; ++i) {
@@ -377,6 +375,9 @@ public:
 
             fluid_attributes.positions[2 * (fluid_attributes.num_particles + addedTo)] = prevPx;
             fluid_attributes.positions[2 * (fluid_attributes.num_particles + addedTo) + 1] = prevPy;
+            
+            fluid_attributes.renderPositions[2 * (fluid_attributes.num_particles + addedTo)] = prevPx;
+            fluid_attributes.renderPositions[2 * (fluid_attributes.num_particles + addedTo) + 1] = prevPy;
 
             addedTo++;
         }
@@ -386,12 +387,15 @@ public:
         /*fluid_attributes.particle_densities.resize(fluid_attributes.num_particles);
         fluid_attributes.densities.resize(fluid_attributes.num_particles);*/
         fluid_attributes.positions.resize(2 * fluid_attributes.num_particles);
+        fluid_attributes.renderPositions.resize(2 * fluid_attributes.num_particles);
         fluid_attributes.velocities.resize(2 * fluid_attributes.num_particles);
         fluid_renderer.particleDiffusionColors.resize(3 * fluid_attributes.num_particles);
 
+        fluid_attributes.particleAges.resize(fluid_attributes.num_particles);
+
         int start = fluid_attributes.num_particles - addedTo;
 
-        for (int i = start; i < fluid_attributes.num_particles; i++) {
+        for (int i = start; i < fluid_attributes.num_particles; ++i) {
             int idx1 = 2 * i;
             int idx2 = 3 * i;
 
@@ -400,10 +404,14 @@ public:
             fluid_attributes.velocities[idx1] = 0.f;
             fluid_attributes.velocities[idx1 + 1] = 0.f;
 
-            fluid_renderer.particleDiffusionColors[idx2] = 255;
-            fluid_renderer.particleDiffusionColors[idx2 + 1] = 255;
+            fluid_renderer.particleDiffusionColors[idx2] = 0;
+            fluid_renderer.particleDiffusionColors[idx2 + 1] = 0;
             fluid_renderer.particleDiffusionColors[idx2 + 2] = 255;
+
+            fluid_attributes.particleAges[i] = 0;
         }
+
+        // make Resize(num_particles) methods within each struct. this is too messy
 
         this->collisions.resize(fluid_attributes.num_particles);
         fluid_attributes.temperatures.resize(fluid_attributes.num_particles);
@@ -464,6 +472,9 @@ public:
                         fluid_attributes.positions[doubleid] = fluid_attributes.positions[double_len - 2 - doubleremove];
                         fluid_attributes.positions[doubleid + 1] = fluid_attributes.positions[double_len - 1 - doubleremove];
 
+                        fluid_attributes.renderPositions[doubleid] = fluid_attributes.renderPositions[double_len - 2 - doubleremove];
+                        fluid_attributes.renderPositions[doubleid + 1] = fluid_attributes.renderPositions[double_len - 1 - doubleremove];
+
                         fluid_attributes.velocities[doubleid] = fluid_attributes.velocities[double_len - 2 - doubleremove];
                         fluid_attributes.velocities[doubleid + 1] = fluid_attributes.velocities[double_len - 1 - doubleremove];
 
@@ -480,6 +491,7 @@ public:
         /*fluid_attributes.particle_densities.resize(fluid_attributes.num_particles);
         fluid_attributes.densities.resize(fluid_attributes.num_particles);*/
         fluid_attributes.positions.resize(2 * fluid_attributes.num_particles);
+        fluid_attributes.renderPositions.resize(2 * fluid_attributes.num_particles);
         fluid_attributes.velocities.resize(2 * fluid_attributes.num_particles);
     
         this->collisions.resize(fluid_attributes.num_particles);
@@ -494,6 +506,8 @@ public:
         transfer_grid.topRightWeights.resize(2 * fluid_attributes.num_particles);
         transfer_grid.bottomLeftWeights.resize(2 * fluid_attributes.num_particles);
         transfer_grid.bottomRightWeights.resize(2 * fluid_attributes.num_particles);
+
+        fluid_attributes.particleAges.resize(fluid_attributes.num_particles);
 
         fluid_renderer.ResizeAndUpdateMesh(fluid_attributes.num_particles);
     }

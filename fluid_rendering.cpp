@@ -6,7 +6,7 @@ FluidRenderer::FluidRenderer(FluidState &fas): fluid_attributes(fas)
 {
     int numParticles = fluid_attributes.num_particles;
     n = fluid_attributes.numY;
-    radius = fluid_attributes.radius + 0.5f;
+    radius = fluid_attributes.radius * 1.25f;
     invSpacing = 1.f / fluid_attributes.cellSpacing;
 
     ResizeAndUpdateMesh(fluid_attributes.num_particles);
@@ -35,6 +35,35 @@ FluidRenderer::FluidRenderer(FluidState &fas): fluid_attributes(fas)
 
 FluidRenderer::~FluidRenderer() {
     UnloadTexture(particleTexture);
+}
+
+
+
+float FluidRenderer::lerp(float a, float b, float alpha) {
+    return (1.f - alpha) * a + b * alpha;
+}
+
+
+
+float FluidRenderer::CalculateInterpolation() {
+    return fluid_attributes.frame_context.setDT / fluid_attributes.frame_context.trueDT;
+}
+
+
+
+void FluidRenderer::InterpolatePositions(float alpha) {
+    for (int i = 0; i < fluid_attributes.num_particles; ++i) {
+        fluid_attributes.renderPositions[2 * i] = lerp(
+            fluid_attributes.renderPositions[2 * i],
+            fluid_attributes.positions[2 * i],
+            alpha
+        );
+        fluid_attributes.renderPositions[2 * i + 1] = lerp(
+            fluid_attributes.renderPositions[2 * i + 1],
+            fluid_attributes.positions[2 * i + 1],
+            alpha
+        );
+    }
 }
 
 
@@ -105,13 +134,13 @@ void FluidRenderer::writePositions(int start, int end) {
         int quadIdx = i;
         int vertexIdx = quadIdx * 4;
 
-        float px = fluid_attributes.positions[2 * i];
-        float py = fluid_attributes.positions[2 * i + 1];
+        float px = fluid_attributes.renderPositions[2 * i];
+        float py = fluid_attributes.renderPositions[2 * i + 1];
 
-        float left = px - fluid_attributes.radius;
-        float right = px + fluid_attributes.radius;
-        float top = py + fluid_attributes.radius;
-        float bottom = py - fluid_attributes.radius;
+        float left = px - radius;
+        float right = px + radius;
+        float top = py + radius;
+        float bottom = py - radius;
 
         writePosition(vertexIdx, left, top, right, bottom, particleVertices);
     }
@@ -140,9 +169,9 @@ void FluidRenderer::GetParticleDiffusionColor(int particleIdx, int &r, int &g, i
 
     const float d0 = fluid_attributes.particleRestDensity;
 
-    if (d0 > 0.f) {
+    if (d0 > 0.f && fluid_attributes.particleAges[particleIdx] > fluid_attributes.age_constant - 1) {
         const float relDensity = this->fluid_attributes.cellDensities[cellNr] / d0;
-        if (relDensity < diffusionRatio) { 
+        if (relDensity > 0 && relDensity < diffusionRatio) { 
             particleDiffusionColors[3 * particleIdx] = 204;
             particleDiffusionColors[3 * particleIdx + 1] = 204;
             particleDiffusionColors[3 * particleIdx + 2] = 255;
@@ -296,10 +325,10 @@ void FluidRenderer::replaceParticleWithEnd(int removeIdx, int endIdx) {
 
     int replacedVertexIdx = removeIdx * 4;
 
-    float left = replacingPx - fluid_attributes.radius;
-    float right = replacingPx + fluid_attributes.radius;
-    float top = replacingPy + fluid_attributes.radius;
-    float bottom = replacingPy - fluid_attributes.radius;
+    float left = replacingPx - radius;
+    float right = replacingPx + radius;
+    float top = replacingPy + radius;
+    float bottom = replacingPy - radius;
 
     writePosition(replacedVertexIdx, left, top, right, bottom, particleVertices);
 }
@@ -313,6 +342,9 @@ void FluidRenderer::DrawParticles() {
 
 
 void FluidRenderer::render_fluid() {
+    float alpha = CalculateInterpolation();
+    InterpolatePositions(alpha);
+
     UpdateParticlePositionsMulti(0, fluid_attributes.num_particles);
     UpdateParticleColorsMulti(0, fluid_attributes.num_particles);
 
