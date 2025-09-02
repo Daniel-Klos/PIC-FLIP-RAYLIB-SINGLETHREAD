@@ -384,8 +384,6 @@ public:
 
         fluid_attributes.num_particles += addedTo;
 
-        /*fluid_attributes.particle_densities.resize(fluid_attributes.num_particles);
-        fluid_attributes.densities.resize(fluid_attributes.num_particles);*/
         fluid_attributes.positions.resize(2 * fluid_attributes.num_particles);
         fluid_attributes.renderPositions.resize(2 * fluid_attributes.num_particles);
         fluid_attributes.velocities.resize(2 * fluid_attributes.num_particles);
@@ -398,8 +396,6 @@ public:
         for (int i = start; i < fluid_attributes.num_particles; ++i) {
             int idx1 = 2 * i;
             int idx2 = 3 * i;
-
-            //fluid_attributes.particle_densities[i] = (i < fluid_attributes.num_particles / 2) ? 0.9f : 0.2f;
 
             fluid_attributes.velocities[idx1] = 0.f;
             fluid_attributes.velocities[idx1 + 1] = 0.f;
@@ -416,21 +412,7 @@ public:
         this->collisions.resize(fluid_attributes.num_particles);
         fluid_attributes.temperatures.resize(fluid_attributes.num_particles);
 
-        transfer_grid.topLeftCells.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.topRightCells.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.bottomLeftCells.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.bottomRightCells.resize(2 * fluid_attributes.num_particles);
-
-        transfer_grid.topLeftWeights.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.topRightWeights.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.bottomLeftWeights.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.bottomRightWeights.resize(2 * fluid_attributes.num_particles);
-
-        fluid_attributes.affineMats.resize(4 * fluid_attributes.num_particles); 
-        fluid_attributes.dxLefts.resize(fluid_attributes.num_particles);
-        fluid_attributes.dxRights.resize(fluid_attributes.num_particles);
-        fluid_attributes.dyBottoms.resize(fluid_attributes.num_particles);
-        fluid_attributes.dyTops.resize(fluid_attributes.num_particles);
+        transfer_grid.Resize(fluid_attributes.num_particles);
 
         fluid_renderer.ResizeAndUpdateMesh(fluid_attributes.num_particles);
     }
@@ -488,24 +470,14 @@ public:
         }
         fluid_attributes.num_particles -= remove;
     
-        /*fluid_attributes.particle_densities.resize(fluid_attributes.num_particles);
-        fluid_attributes.densities.resize(fluid_attributes.num_particles);*/
         fluid_attributes.positions.resize(2 * fluid_attributes.num_particles);
         fluid_attributes.renderPositions.resize(2 * fluid_attributes.num_particles);
         fluid_attributes.velocities.resize(2 * fluid_attributes.num_particles);
     
         this->collisions.resize(fluid_attributes.num_particles);
         fluid_attributes.temperatures.resize(fluid_attributes.num_particles);
-    
-        transfer_grid.topLeftCells.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.topRightCells.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.bottomLeftCells.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.bottomRightCells.resize(2 * fluid_attributes.num_particles);
-    
-        transfer_grid.topLeftWeights.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.topRightWeights.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.bottomLeftWeights.resize(2 * fluid_attributes.num_particles);
-        transfer_grid.bottomRightWeights.resize(2 * fluid_attributes.num_particles);
+
+        transfer_grid.Resize(fluid_attributes.num_particles);
 
         fluid_attributes.particleAges.resize(fluid_attributes.num_particles);
 
