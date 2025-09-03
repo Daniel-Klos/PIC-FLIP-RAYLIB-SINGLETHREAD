@@ -162,10 +162,6 @@ inline bool gteEpsMinus(float a, float b) {
     return a >= b - Eps;
 }
 
-struct Vector2vu {
-    std::array<float, 2> vu;
-};
-
 inline int GetFractionOf(int of, float fraction) {
     return of * fraction;
 }

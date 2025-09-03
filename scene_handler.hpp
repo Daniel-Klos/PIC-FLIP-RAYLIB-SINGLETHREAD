@@ -174,7 +174,7 @@ struct SceneHandler {
             std::fill(begin(fluid_handler.collisions), end(fluid_handler.collisions), 0);
         }
 
-        fluid_handler.addObjectsToGrids();
+        fluid_handler.FillCollisionGrid();
 
 
         if (obstacle_handler.solidDrawing && fluid_attributes.frame_context.leftMouseDown) {

@@ -108,7 +108,7 @@ public:
         }
     }
 
-    void addObjectsToGrids()
+    void FillCollisionGrid()
     {
 
         collisionGrid.clear();
