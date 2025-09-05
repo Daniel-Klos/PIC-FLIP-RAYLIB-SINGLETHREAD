@@ -166,17 +166,10 @@ struct SceneHandler {
 
         // fluid_handler.pressure_solver.project_density_implicit();
 
-        if (fluid_handler.fluid_renderer.getRenderPattern() == 4 && fluid_attributes.fireActive) {
-            fluid_handler.makeFire();
-        }
-
-        if (fluid_attributes.fireActive) {
-            std::fill(begin(fluid_handler.collisions), end(fluid_handler.collisions), 0);
-        }
-
         fluid_handler.FillCollisionGrid();
 
 
+        // make this into HandleUserInteraction() method, with submethods HandleInteraction for both obstacle_handler and fluid_handler
         if (obstacle_handler.solidDrawing && fluid_attributes.frame_context.leftMouseDown) {
             obstacle_handler.drawSolids();
         } else if (obstacle_handler.solidDrawing && fluid_attributes.frame_context.rightMouseDown) {
@@ -190,15 +183,12 @@ struct SceneHandler {
         }
 
 
-        fluid_handler.solveCollisions();
-
-
-
-
-
-        if (fluid_handler.fluid_renderer.getRenderPattern() == 4) {
-            fluid_handler.heatGround();
+        // move all of this chunk into ModifyPositions
+        // move this into solveCollosions
+        if (fluid_attributes.fireActive) {
+            std::fill(begin(fluid_handler.collisions), end(fluid_handler.collisions), 0);
         }
+        fluid_handler.solveCollisions();
 
         obstacle_handler.collideSurfacesMulti();
 
@@ -210,7 +200,7 @@ struct SceneHandler {
         
         fluid_handler.transfer_grid.updateCellDensitiesMulti();
 
-        // apply body forces to grid
+        // move these into ApplyBodyForces() method
         if (fluid_handler.dragObjectActive) {
             fluid_handler.includeDragObject();
         } else if (fluid_handler.forceObjectActive && fluid_attributes.frame_context.leftMouseDown) {
@@ -218,7 +208,12 @@ struct SceneHandler {
         } else if (fluid_handler.forceObjectActive && fluid_attributes.frame_context.rightMouseDown) { 
             fluid_handler.includeForceObject(1000); // pushing, 1000
         }
-
+        if (fluid_handler.fluid_renderer.getRenderPattern() == 4 && fluid_attributes.fireActive) {
+            fluid_handler.makeFire();
+        }
+        if (fluid_handler.fluid_renderer.getRenderPattern() == 4) {
+            fluid_handler.heatGround();
+        }
         if (fluid_attributes.vorticityStrength != 0) {
             fluid_handler.applyVorticityConfinementRedBlack();
         }

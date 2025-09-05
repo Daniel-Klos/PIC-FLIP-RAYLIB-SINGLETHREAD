@@ -94,6 +94,19 @@ public:
         }
     }
 
+    void heatGround() {
+        const float percentRemoved = 0.1f;
+        const float leftEdge = fluid_attributes.frame_context.WIDTH * percentRemoved;
+        const float rightEdge = fluid_attributes.frame_context.WIDTH * (1.0f - percentRemoved);
+        for (int i = 0; i < fluid_attributes.num_particles; ++i) {
+            if (fluid_attributes.positions[2 * i + 1] + fluid_attributes.radius > fluid_attributes.frame_context.HEIGHT - 2 * fluid_attributes.cellSpacing) {
+                if ((fluid_renderer.renderPattern == 3 && fluid_attributes.temperatures[i] < fluid_renderer.tempGradient.size()) || (fluid_attributes.positions[2 * i] > leftEdge && fluid_attributes.positions[2 * i] < rightEdge)) {
+                    fluid_attributes.temperatures[i] += fluid_attributes.groundConductivity * fluid_attributes.frame_context.dt;
+                }
+            }
+        }
+    }
+
     void makeFire() {
         for (int i = 0; i < fluid_attributes.num_particles; ++i) {
             if (fluid_attributes.positions[2 * i + 1] < fluid_attributes.frame_context.HEIGHT - fluid_attributes.cellSpacing - 10) {
@@ -195,19 +208,6 @@ public:
         const uint32_t slice_size = collisionGrid.width * collisionGrid.height;
         
         solveCollisionThreaded(0, slice_size);
-    }
-
-    void heatGround() {
-        const float percentRemoved = 0.1f;
-        const float leftEdge = fluid_attributes.frame_context.WIDTH * percentRemoved;
-        const float rightEdge = fluid_attributes.frame_context.WIDTH * (1.0f - percentRemoved);
-        for (int i = 0; i < fluid_attributes.num_particles; ++i) {
-            if (fluid_attributes.positions[2 * i + 1] + fluid_attributes.radius > fluid_attributes.frame_context.HEIGHT - 2 * fluid_attributes.cellSpacing) {
-                if ((fluid_renderer.renderPattern == 3 && fluid_attributes.temperatures[i] < fluid_renderer.tempGradient.size()) || (fluid_attributes.positions[2 * i] > leftEdge && fluid_attributes.positions[2 * i] < rightEdge)) {
-                    fluid_attributes.temperatures[i] += fluid_attributes.groundConductivity * fluid_attributes.frame_context.dt;
-                }
-            }
-        }
     }
 
     void calcVorticityConfinement(bool red, int32_t startColumn, int32_t endColumn) {
