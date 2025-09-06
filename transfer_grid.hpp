@@ -19,26 +19,6 @@ class TransferGrid {
     std::vector<float> Cu;
     std::vector<float> Cv;
 
-    std::vector<float> dxLeft;  // x_p - x_cell for u and v grids respectively
-    std::vector<float> dxRight;
-    std::vector<float> dyBottom;
-    std::vector<float> dyTop;
-    
-    std::vector<int32_t> topLeftCells;
-    std::vector<int32_t> topRightCells;
-    std::vector<int32_t> bottomRightCells;
-    std::vector<int32_t> bottomLeftCells;
-
-    std::vector<float> topLeftWeights;
-    std::vector<float> topRightWeights;
-    std::vector<float> bottomLeftWeights;
-    std::vector<float> bottomRightWeights;
-
-    std::vector<float> topLeftWeightDerivs;
-    std::vector<float> topRightWeightDerivs;
-    std::vector<float> bottomLeftWeightDerivs;
-    std::vector<float> bottomRightWeightDerivs;
-
     FluidState &fluid_attributes;
 
     CollisionGrid cellOccupantsGrid;
@@ -62,8 +42,17 @@ public:
         cellOccupantsGrid = CollisionGrid(fluid_attributes.numX, fluid_attributes.numY);
     }
 
-    void TransferToGrid() {
+    void updateCellDensitiesMulti() {
         setUpTransferGrids();
+
+        std::fill(begin(fluid_attributes.cellDensities), end(fluid_attributes.cellDensities), 0.f);
+        
+        updateCellDensities();
+
+        calculateRestDensity();
+    }
+
+    void TransferToGrid() {
 
         P2G(0, fluid_attributes.num_fluid_cells);
 
@@ -81,14 +70,6 @@ public:
         G2P(1);
     }
 
-    void updateCellDensitiesMulti() {
-        std::fill(begin(fluid_attributes.cellDensities), end(fluid_attributes.cellDensities), 0.f);
-        
-        updateCellDensities();
-
-        calculateRestDensity();
-    }
-
     void Resize(int newSize) {
         Cu.resize(2 * newSize);
         Cv.resize(2 * newSize);
@@ -97,10 +78,12 @@ public:
 private:
 
     void GetGridPositions(float px, float py, int& x0, int& x1, int& y0, int& y1, int component) {
+
+        // if you ever implement extrapolation, see if this bug goes away
         x0 = std::max(1, std::min(static_cast<int>(std::floor(px * invSpacing)), fluid_attributes.numX - 2));
-        x1 = std::min(x0 + 1, fluid_attributes.numX - 2);
+        x1 = std::min(x0 + 1, fluid_attributes.numX - 2); // <- see if you can make this 1
     
-        y0 = std::max(0, std::min(static_cast<int>(std::floor(py * invSpacing)), fluid_attributes.numY - 2));
+        y0 = std::max(1, std::min(static_cast<int>(std::floor(py * invSpacing)), fluid_attributes.numY - 2));
         y1 = std::min(y0 + 1, fluid_attributes.numY - 1);
 
         // this stops the fluid touching the left wall from going down
@@ -174,7 +157,7 @@ private:
             }
         }
 
-        // add particles to occupantsGrid for multithreading
+        // add particles to foccupantsGrid for multithreading
         cellOccupantsGrid.clear();
 
         const float minX = fluid_attributes.cellSpacing;
@@ -201,7 +184,7 @@ private:
     void TransferToGridCell(int idx, int component) {
         const auto cell = cellOccupantsGrid.data[idx];
 
-        auto &grid = component == 0 ? fluid_attributes.u : fluid_attributes.v;
+        auto &gridVel = component == 0 ? fluid_attributes.u : fluid_attributes.v;
         auto &gridWeights = component == 0 ? fluid_attributes.sumUGridWeights : fluid_attributes.sumVGridWeights;
         auto &C = component == 0 ? Cu : Cv;
     
@@ -212,12 +195,12 @@ private:
 
             float px = fluid_attributes.positions[i];
             float py = fluid_attributes.positions[i + 1];
+
+            px -= (component == 1) * halfSpacing;
+            py -= (component == 0) * halfSpacing;
             
             px = clamp(px, fluid_attributes.cellSpacing, (fluid_attributes.numX - 1) * fluid_attributes.cellSpacing);
             py = clamp(py, fluid_attributes.cellSpacing, (fluid_attributes.numY - 1) * fluid_attributes.cellSpacing);
-            
-            px -= (component == 1) * halfSpacing;
-            py -= (component == 0) * halfSpacing;
             
             int x0, x1, y0, y1;
             x0 = x1 = y0 = y1 = 0;
@@ -262,10 +245,10 @@ private:
                                     C1 * dxRight + 
                                     C2 * dyTop;
            
-            grid[topLeftCell]     += affinepvxTopLeft     * topLeftWeight;
-            grid[topRightCell]    += affinepvTopRight     * topRightWeight;
-            grid[bottomLeftCell]  += affinepvxBottomLeft  * bottomLeftWeight;
-            grid[bottomRightCell] += affinepvxBottomRight * bottomRightWeight;
+            gridVel[topLeftCell]     += affinepvxTopLeft     * topLeftWeight;
+            gridVel[topRightCell]    += affinepvTopRight     * topRightWeight;
+            gridVel[bottomLeftCell]  += affinepvxBottomLeft  * bottomLeftWeight;
+            gridVel[bottomRightCell] += affinepvxBottomRight * bottomRightWeight;
 
             /*grid[topLeftCell]     += pv * topLeftWeight;
             grid[topRightCell]    += pv * topRightWeight;
@@ -470,17 +453,20 @@ private:
             float x = fluid_attributes.positions[2 * i];
             float y = fluid_attributes.positions[2 * i + 1];
 
+            x -= halfSpacing;
+            y -= halfSpacing;
+
             x = clamp(x, fluid_attributes.cellSpacing, (fluid_attributes.numX - 1) * fluid_attributes.cellSpacing);
             y = clamp(y, fluid_attributes.cellSpacing, (fluid_attributes.numY - 1) * fluid_attributes.cellSpacing);
 
-            int x0 = std::max(1, std::min((int)(std::floor((x - halfSpacing) * invSpacing)), fluid_attributes.numX - 2));
+            int x0 = std::max(1, std::min((int)(std::floor(x * invSpacing)), fluid_attributes.numX - 2));
             int x1 = std::min(x0 + 1, fluid_attributes.numX - 1);
 
-            int y0 = std::max(1, std::min((int)(std::floor((y - halfSpacing) * invSpacing)), fluid_attributes.numY - 2));
+            int y0 = std::max(1, std::min((int)(std::floor(y * invSpacing)), fluid_attributes.numY - 2));
             int y1 = std::min(y0 + 1, fluid_attributes.numY - 2);
            
-            float dxLeft = ((x - halfSpacing) - x0 * fluid_attributes.cellSpacing) * invSpacing;
-            float dyTop = ((y - halfSpacing) - y0 * fluid_attributes.cellSpacing) * invSpacing;
+            float dxLeft = (x - x0 * fluid_attributes.cellSpacing) * invSpacing;
+            float dyTop = (y - y0 * fluid_attributes.cellSpacing) * invSpacing;
             float dxRight = 1.f - dxLeft;
             float dyBottom = 1.f - dyTop;
 

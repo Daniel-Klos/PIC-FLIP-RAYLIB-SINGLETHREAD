@@ -148,28 +148,31 @@ struct SceneHandler {
     }
 
     void update_environment() {
-        ++steps;
-
-        // order of need of implementation/optimization:
-            // 1) move event handling into scene_handler
-            // 2) add a way to switch between particle view and liquid glass view
-            // 3) Thread buffers EVERYWHERE
-            // 4) implement Multi Grid, then MGPCG
-            // 5) make a sampleVelocity(point) function that can easily incorporate different interpolation functions
-                // 6) so that you can do RK advection easier
-            // 7) DDA raycasting & making sure that particle-particle collisions dont push particles into obstacles
-            // 8) implement implicit density projection
-            // 9) finish cleaning up all this code
-            // 10) make it so that you pass in static arrays instead of just numbers of particles in the main file
 
         fluid_handler.integrate();
 
-        // fluid_handler.pressure_solver.project_density_implicit();
+        // final product, but for now start implementing the features after FillCollisionGrid and ModifyParticlePositions. Keep FillCollisionGrid when this is all
+        //fluid_handler.pressure_solver.project_density_implicit();
 
         fluid_handler.FillCollisionGrid();
 
+        HandleUserInteraction();
 
-        // make this into HandleUserInteraction() method, with submethods HandleInteraction for both obstacle_handler and fluid_handler
+        ModifyParticlePositions();
+        // have to update cell densities AFTER im done modifying all positions, but with IDP, the algorithm will modify all positions (walls & pp), so i wont have to worry about modifyparticlepositions anymore
+        fluid_handler.transfer_grid.updateCellDensitiesMulti();
+
+        fluid_handler.transfer_grid.TransferToGrid();
+
+        ApplyBodyForces();
+        
+        fluid_handler.pressure_solver.projectRedBlackSORMulti(fluid_handler.pressure_solver.numPressureIters);
+
+        fluid_handler.transfer_grid.TransferToParticles();
+    }
+
+
+    void HandleUserInteraction() {
         if (obstacle_handler.solidDrawing && fluid_attributes.frame_context.leftMouseDown) {
             obstacle_handler.drawSolids();
         } else if (obstacle_handler.solidDrawing && fluid_attributes.frame_context.rightMouseDown) {
@@ -181,60 +184,61 @@ struct SceneHandler {
         } else if (fluid_handler.generatorActive && fluid_attributes.frame_context.rightMouseDown) {
             fluid_handler.remove();
         }
+    }
 
 
-        // move all of this chunk into ModifyPositions
-        // move this into solveCollosions
-        if (fluid_attributes.fireActive) {
-            std::fill(begin(fluid_handler.collisions), end(fluid_handler.collisions), 0);
-        }
+    void ModifyParticlePositions() {
         fluid_handler.solveCollisions();
 
         obstacle_handler.collideSurfacesMulti();
 
         obstacle_handler.constrainWallsMulti();
-
-
-
-        fluid_handler.transfer_grid.TransferToGrid();
-        
-        fluid_handler.transfer_grid.updateCellDensitiesMulti();
-
-        // move these into ApplyBodyForces() method
-        if (fluid_handler.dragObjectActive) {
-            fluid_handler.includeDragObject();
-        } else if (fluid_handler.forceObjectActive && fluid_attributes.frame_context.leftMouseDown) {
-            fluid_handler.includeForceObject(-250); // pulling, -250
-        } else if (fluid_handler.forceObjectActive && fluid_attributes.frame_context.rightMouseDown) { 
-            fluid_handler.includeForceObject(1000); // pushing, 1000
-        }
-        if (fluid_handler.fluid_renderer.getRenderPattern() == 4 && fluid_attributes.fireActive) {
-            fluid_handler.makeFire();
-        }
-        if (fluid_handler.fluid_renderer.getRenderPattern() == 4) {
-            fluid_handler.heatGround();
-        }
-        if (fluid_attributes.vorticityStrength != 0) {
-            fluid_handler.applyVorticityConfinementRedBlack();
-        }
-
-
-        //start = std::chrono::high_resolution_clock::now();
-        
-        fluid_handler.pressure_solver.projectRedBlackSORMulti(fluid_handler.pressure_solver.numPressureIters);
-
-        // PCG with RBSOR as a preconditioner makes super cool high frequency patterns
-        /*fluid_handler.pressure_solver.projectPCG([&]() {
-            fluid_handler.pressure_solver.projectRedBlackSORMulti(3); // around 2-6 iterations for preconditioner
-        });*/
-        //fluid_handler.pressure_solver.projectCG();
-
-
-        fluid_handler.transfer_grid.TransferToParticles();
     }
 
+
+    void ApplyBodyForces() {
+        if (fluid_handler.dragObjectActive) {                                                          // dragging
+            fluid_handler.includeDragObject();
+        } if (fluid_handler.forceObjectActive && fluid_attributes.frame_context.leftMouseDown) {  // force pull
+            fluid_handler.includeForceObject(-250);
+        } if (fluid_handler.forceObjectActive && fluid_attributes.frame_context.rightMouseDown) { // force push
+            fluid_handler.includeForceObject(1000); // pushing, 1000
+        }
+        if (fluid_handler.fluid_renderer.getRenderPattern() == 4 && fluid_attributes.fireActive) {     // applying buoyant force to high temperature partiles
+            fluid_handler.makeFire();
+        }
+        if (fluid_handler.fluid_renderer.getRenderPattern() == 4) {                              // ground->particle thermal conducting. I just lump it in here but it's not an actual force
+            fluid_handler.heatGround();                                                          // note that particle->particle thermal conducting is handled in fluid_handler.solveCollisions()
+        }
+        if (fluid_attributes.vorticityStrength != 0) {           // vorticity confinement
+            fluid_handler.applyVorticityConfinementRedBlack();
+        }
+    }
+
+
+    void handle_zoom() {
+        if (fluid_attributes.frame_context.leftMouseDown && scene_renderer.getZoomObjectActive()) {
+            scene_renderer.dragCamera();
+        }
+        if (fluid_attributes.frame_context.zooming) {
+            float zoom = fluid_attributes.frame_context.zoom_amount;
+            fluid_handler.objectSimRadius = fluid_handler.objectRenderRadius / zoom;
+        }
+    }
+
+    void render_interaction_objects() {
+        fluid_handler.render_objects();
+        obstacle_handler.render_objects();
+    }
+
+
     void track_key_events() {
-        //auto start = std::chrono::high_resolution_clock::now();
+        track_keydown_events();
+        track_keypressed_events();
+    }
+
+
+    void track_keydown_events() {
         if (IsKeyDown(KEY_B)) {
             if (lteEpsPlus(fluid_attributes.getFlipRatio(), 0.99f)) {
                 bool smallIncrement = gteEpsMinus(fluid_attributes.getFlipRatio(), 0.9f);
@@ -265,17 +269,41 @@ struct SceneHandler {
                 fluid_attributes.addToVorticityStrength(-10);
             }
         }
-        if (IsKeyDown(KEY_P)) {
-            fluid_handler.pressure_solver.addToNumPressureIters(1);
-        }
-        if (IsKeyDown(KEY_O)) {
-            if (fluid_handler.pressure_solver.getNumPressureIters() > 0) {
-                fluid_handler.pressure_solver.addToNumPressureIters(-1);
-            }
-        }
         if (IsKeyDown(KEY_R)) {
             scene_renderer.reset_zoom();
         }
+        if (IsKeyDown(KEY_G)) {
+            fluid_attributes.addToGravityY(100);
+        }
+        if (IsKeyDown(KEY_N)) {
+            fluid_attributes.addToGravityY(-100);
+        }
+        if (IsKeyDown(KEY_M)) {
+            fluid_attributes.addToGravityX(100);
+        }
+        if (IsKeyDown(KEY_H)) {
+            fluid_attributes.addToGravityX(-100);
+        }
+        /*if (IsKeyPressed(KEY_Q)) {
+            std::cout << 
+            "Fill Grid: " << getFillGridTime() << "\n" <<
+            "Miscellaneous: " << getMiscellaneousTime() << "\n" <<
+            "Collision: " << getCollisionTime() << "\n" <<
+            "Obstacle Collision: " << getObstacleCollisionTime() << "\n" <<
+            "To Grid: " << getToGridTime() << "\n" <<
+            "Density Update: " << getDensityUpdateTime() << "\n" <<
+            "Projection: " << getProjectionTime() << "\n" <<
+            "To Particles: " << getToParticlesTime() << "\n" <<
+            "Rendering: " << getRenderingTime() << "\n"; // <<
+            //"Whole Step: " << fluid_handler.getSimStepTime() << "\n" <<
+            //"Combined: " << fluid_handler.getCombinedTime() << "\n" <<
+            //"Before Sim Step: " << beforeSimStep << "\n" <<
+            //"After Sim Step: " << afterSimStep << "\n";
+            CloseWindow();
+        }*/
+    }
+
+    void track_keypressed_events() {
         if (IsKeyDown(KEY_ONE)) {
             fluid_handler.setDragObjectActive(true);
             fluid_handler.setForceObjectActive(false);
@@ -311,26 +339,7 @@ struct SceneHandler {
             obstacle_handler.setSolidDrawer(false);
             scene_renderer.setZoomObjectActive(true);
         }
-        if (IsKeyDown(KEY_G)) {
-            fluid_attributes.addToGravityY(100);
-        }
-        if (IsKeyDown(KEY_N)) {
-            fluid_attributes.addToGravityY(-100);
-        }
-        if (IsKeyDown(KEY_M)) {
-            fluid_attributes.addToGravityX(100);
-        }
-        if (IsKeyDown(KEY_H)) {
-            fluid_attributes.addToGravityX(-100);
-        }
-        if (IsKeyDown(KEY_C)) {
-            if (fluid_handler.pressure_solver.getDivergenceModifier() > 0) {
-                fluid_handler.pressure_solver.addToDivergenceModifier(-1);
-            }
-        }
-        if (IsKeyDown(KEY_D)) {
-            fluid_handler.pressure_solver.addToDivergenceModifier(1);
-        }
+
         if (IsKeyPressed(KEY_A)) {
             scene_renderer.fluid_renderer.setNextRenderPattern();
         }
@@ -343,26 +352,6 @@ struct SceneHandler {
         if (IsKeyPressed(KEY_U)) {
             fluid_attributes.setStep(true);
         }
-        /*if (IsKeyPressed(KEY_Q)) {
-            std::cout << 
-            "Fill Grid: " << getFillGridTime() << "\n" <<
-            "Miscellaneous: " << getMiscellaneousTime() << "\n" <<
-            "Collision: " << getCollisionTime() << "\n" <<
-            "Obstacle Collision: " << getObstacleCollisionTime() << "\n" <<
-            "To Grid: " << getToGridTime() << "\n" <<
-            "Density Update: " << getDensityUpdateTime() << "\n" <<
-            "Projection: " << getProjectionTime() << "\n" <<
-            "To Particles: " << getToParticlesTime() << "\n" <<
-            "Rendering: " << getRenderingTime() << "\n"; // <<
-            //"Whole Step: " << fluid_handler.getSimStepTime() << "\n" <<
-            //"Combined: " << fluid_handler.getCombinedTime() << "\n" <<
-            //"Before Sim Step: " << beforeSimStep << "\n" <<
-            //"After Sim Step: " << afterSimStep << "\n";
-            CloseWindow();
-        }*/
-        /*end = std::chrono::high_resolution_clock::now();
-        duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        addValueToAverage(afterSimStep, duration.count(), numDT);*/
     }
 
     void track_mouse_events() {
@@ -473,21 +462,6 @@ struct SceneHandler {
             DrawCircle(showControlsX + showControlsWIDTH, showControlsY + showControlsHEIGHT, 10, RED);*/
         }
 
-    }
-
-    void handle_zoom() {
-        if (fluid_attributes.frame_context.leftMouseDown && scene_renderer.getZoomObjectActive()) {
-            scene_renderer.dragCamera();
-        }
-        if (fluid_attributes.frame_context.zooming) {
-            float zoom = fluid_attributes.frame_context.zoom_amount;
-            fluid_handler.objectSimRadius = fluid_handler.objectRenderRadius / zoom;
-        }
-    }
-
-    void render_interaction_objects() {
-        fluid_handler.render_objects();
-        obstacle_handler.render_objects();
     }
 
     float getCombinedTime() {

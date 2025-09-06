@@ -14,7 +14,7 @@ struct PressureSolver {
     float k = 10.f;
     float overRelaxation = 1.9f;
 
-    std::vector<double> residual;
+    /*std::vector<double> residual;
     std::vector<double> Adiag;
     std::vector<double> precon;
     std::vector<double> direction;
@@ -27,7 +27,7 @@ struct PressureSolver {
     static constexpr uint8_t BOTTOM = 16;
     static constexpr uint8_t TOP = 8;
     static constexpr uint8_t CENTER = 7;
-    static constexpr std::array<uint8_t, 4> directions{LEFT, RIGHT, BOTTOM, TOP};
+    static constexpr std::array<uint8_t, 4> directions{LEFT, RIGHT, BOTTOM, TOP};*/
 
     std::vector<float> coarseU;
     int max_multigrid_coarseness = 4;
@@ -35,13 +35,13 @@ struct PressureSolver {
     PressureSolver(FluidState &fas): fluid_attributes(fas) {
         n = fluid_attributes.numY;
 
-        gridSize = fluid_attributes.numX * fluid_attributes.numY;
-        this->Adiag.resize(gridSize);
+        gridSize = fluid_attributes.gridSize;
+        /*this->Adiag.resize(gridSize);
         this->neighbors.resize(gridSize);
         this->precon.resize(gridSize);
         this->direction.resize(gridSize);
         this->residual.resize(gridSize);
-        this->pressure.resize(gridSize);
+        this->pressure.resize(gridSize);*/
     }
 
 
@@ -383,21 +383,4 @@ struct PressureSolver {
         applyPressureMulti();
     }*/
     // --------------------------------------------------------------------------------------------------------------------------------------------
-
-
-    void addToNumPressureIters(int32_t add) {
-        numPressureIters += add;
-    }
-
-    int32_t getNumPressureIters() {
-        return numPressureIters;
-    }
-
-    void addToDivergenceModifier(float add) {
-        this->k += add;
-    }
-
-    float getDivergenceModifier() {
-        return this->k;
-    }
 };

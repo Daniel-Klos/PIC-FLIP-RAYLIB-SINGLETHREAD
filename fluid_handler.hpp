@@ -205,6 +205,10 @@ public:
 
     void solveCollisions()
     {
+        if (fluid_attributes.fireActive) {
+            std::fill(begin(collisions), end(collisions), 0);
+        }
+
         const uint32_t slice_size = collisionGrid.width * collisionGrid.height;
         
         solveCollisionThreaded(0, slice_size);
@@ -496,7 +500,7 @@ public:
         if (forceObjectActive || dragObjectActive) {
             drawCircleObject();
         }
-        else if (generatorActive) {
+        if (generatorActive) {
             drawSquareObject();
         }
     }
