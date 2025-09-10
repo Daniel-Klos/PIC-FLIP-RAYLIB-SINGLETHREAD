@@ -261,7 +261,7 @@ public:
         for (int i = objectCellX - objectCellRadius; i < objectCellX + objectCellRadius; i++) {
             for (int j = objectCellY - objectCellRadius; j < objectCellY + objectCellRadius; j++) {
                 int cellNr = i * fluid_attributes.n + j;
-                bool notInBounds = i < 0 || i > fluid_attributes.numX || j < 0 || j > fluid_attributes.numY;
+                bool notInBounds = i < 0 || i >= fluid_attributes.numX || j < 0 || j >= fluid_attributes.numY;
                 if (notInBounds || (fluid_attributes.cellType[i * fluid_attributes.n + j] == fluid_attributes.SOLID)) continue;
                 float dx = (i + 0.5) * fluid_attributes.cellSpacing - forceObjectX;
                 float dy = (j + 0.5) * fluid_attributes.cellSpacing - forceObjectY;
@@ -307,7 +307,7 @@ public:
             for (int i = objectCellX - objectCellRadius; i < objectCellX + objectCellRadius; i++) {
                 for (int j = objectCellY - objectCellRadius; j < objectCellY + objectCellRadius; j++) {
                     int cellNr = i * fluid_attributes.n + j;
-                    bool notInBounds = i < 0 || i > fluid_attributes.numX || j < 0 || j > fluid_attributes.numY;
+                    bool notInBounds = i < 0 || i >= fluid_attributes.numX || j < 0 || j >= fluid_attributes.numY;
                     if (notInBounds || (fluid_attributes.cellType[i * fluid_attributes.n + j] == fluid_attributes.SOLID)) continue;
                     float dx = (i + 0.5) * fluid_attributes.cellSpacing - objectX;
                     float dy = (j + 0.5) * fluid_attributes.cellSpacing - objectY;

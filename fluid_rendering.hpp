@@ -64,7 +64,7 @@ public:
     float invSpacing;
     int32_t renderPattern = 1;
 
-    const float resetRate = 1.5f;
+    const float resetRate = 2.f;
     const float diffusionRatio = 0.75f; // 0.75
     
     Material particleMaterial = {0};
