@@ -21,8 +21,6 @@ class TransferGrid {
 
     FluidState &fluid_attributes;
 
-    CollisionGrid cellOccupantsGrid;
-
 public:
 
     TransferGrid(FluidState &fas): fluid_attributes(fas) {
@@ -35,11 +33,9 @@ public:
         std::fill(begin(Cu), end(Cu), 0.f);
         std::fill(begin(Cv), end(Cv), 0.f);
 
-        SOLID_CELL = fluid_attributes.SOLID_CELL;
-        FLUID_CELL = fluid_attributes.FLUID_CELL;
-        AIR_CELL = fluid_attributes.AIR_CELL;
-
-        cellOccupantsGrid = CollisionGrid(fluid_attributes.numX, fluid_attributes.numY);
+        SOLID_CELL = fluid_attributes.SOLID;
+        FLUID_CELL = fluid_attributes.FLUID;
+        AIR_CELL = fluid_attributes.AIR;
     }
 
     void updateCellDensitiesMulti() {
@@ -157,32 +153,11 @@ private:
             }
         }
 
-        // add particles to foccupantsGrid for multithreading
-        cellOccupantsGrid.clear();
-
-        const float minX = fluid_attributes.cellSpacing;
-        const float maxX = fluid_attributes.frame_context.WIDTH - fluid_attributes.cellSpacing;
-        const float minY = fluid_attributes.cellSpacing;
-        const float maxY = fluid_attributes.frame_context.HEIGHT - fluid_attributes.cellSpacing;
-
-        uint32_t i{0};
-
-        for (int32_t index = 0; index < fluid_attributes.num_particles; ++index) {
-            float x = fluid_attributes.positions[2 * index];
-            float y = fluid_attributes.positions[2 * index + 1];
-            if (x > minX && x < maxX && y > minY && y < maxY) {
-                
-                int32_t cellOccupantsX = x / fluid_attributes.cellSpacing;
-                int32_t cellOccupantsY = y / fluid_attributes.cellSpacing;
-                cellOccupantsGrid.addAtom(cellOccupantsX, cellOccupantsY, i);
-
-            }
-            ++i;
-        }
+        fluid_attributes.FillCellOccupants();
     }
 
     void TransferToGridCell(int idx, int component) {
-        const auto cell = cellOccupantsGrid.data[idx];
+        const auto cell = fluid_attributes.cellOccupants.data[idx];
 
         auto &gridVel = component == 0 ? fluid_attributes.u : fluid_attributes.v;
         auto &gridWeights = component == 0 ? fluid_attributes.sumUGridWeights : fluid_attributes.sumVGridWeights;

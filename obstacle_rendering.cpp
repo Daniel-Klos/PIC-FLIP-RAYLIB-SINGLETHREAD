@@ -89,8 +89,8 @@ void ObstacleRenderer::writeObstaclePositions(int start, int end) {
 
         auto pos = fluid_attributes.gridCellToPos(cellCoords.x * fluid_attributes.n + cellCoords.y);
 
-        float px = pos.x;
-        float py = pos.y;
+        float px = pos.x + fluid_attributes.halfSpacing;
+        float py = pos.y + fluid_attributes.halfSpacing;
 
         float left = px - fluid_attributes.halfSpacing;
         float right = px + fluid_attributes.halfSpacing;
@@ -132,8 +132,8 @@ void ObstacleRenderer::replaceObstacleWithEnd(int removeIdx, int endIdx) {
     auto replacingCellCoords = fluid_attributes.obstaclePositions[endIdx];
 
     auto replacingPos = fluid_attributes.gridCellToPos(replacingCellCoords.x * fluid_attributes.n + replacingCellCoords.y);
-    float replacingPx = replacingPos.x;
-    float replacingPy = replacingPos.y;
+    float replacingPx = replacingPos.x + fluid_attributes.halfSpacing;
+    float replacingPy = replacingPos.y + fluid_attributes.halfSpacing;
 
     int replacedVertexIdx = removeIdx * 4;
 

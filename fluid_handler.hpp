@@ -9,6 +9,7 @@
 
 #include "collision_grid.hpp"
 #include "pressure_solver.hpp"
+#include "density_projection.hpp"
 #include "transfer_grid.hpp"
 #include "fluid_rendering.hpp"
 #include "scene_renderer.hpp"
@@ -19,10 +20,6 @@ class FluidHandler {
     float checkSeparationDist;
 
 public:
-
-    const float colorDiffusionCoeff = 0.001f;
-
-    float diffusionRatio;
 
     float scalingFactor;
     int32_t scaledWIDTH;
@@ -43,25 +40,31 @@ public:
 
     FluidRenderer &fluid_renderer;
     PressureSolver pressure_solver;
+    IDPSolver density_solver;
     TransferGrid transfer_grid;
 
     Color objectColor = {255, 255, 255, 255};
 
-    FluidHandler(FluidState& fas, FluidRenderer &fr): fluid_attributes(fas), fluid_renderer(fr), pressure_solver(fas), transfer_grid(fas) {
+    FluidHandler(FluidState& fas, FluidRenderer &fr): fluid_attributes(fas),
+                                                      fluid_renderer(fr),
+                                                      pressure_solver(fas),
+                                                      density_solver(fas),
+                                                      transfer_grid(fas)
+    {
         
-            this->moveDist = 2 * fluid_attributes.radius;
-            this->checkSeparationDist = moveDist * moveDist;
+        this->moveDist = 2 * fluid_attributes.radius;
+        this->checkSeparationDist = moveDist * moveDist;
 
-            this->collisions.resize(fluid_attributes.num_particles);
+        this->collisions.resize(fluid_attributes.num_particles);
 
-            this->scalingFactor = 2 * fluid_attributes.radius;
+        this->scalingFactor = 2 * fluid_attributes.radius;
 
-            this->scaledWIDTH = std::ceil(static_cast<float>(fluid_attributes.frame_context.WIDTH) / scalingFactor);
-            this->scaledHEIGHT = std::ceil(static_cast<float>(fluid_attributes.frame_context.HEIGHT) / scalingFactor);
+        this->scaledWIDTH = std::ceil(static_cast<float>(fluid_attributes.frame_context.WIDTH) / scalingFactor);
+        this->scaledHEIGHT = std::ceil(static_cast<float>(fluid_attributes.frame_context.HEIGHT) / scalingFactor);
 
-            collisionGrid = CollisionGrid(scaledWIDTH, scaledHEIGHT);
+        collisionGrid = CollisionGrid(scaledWIDTH, scaledHEIGHT);
 
-            objectRenderRadius = objectSimRadius / fluid_attributes.frame_context.zoom_amount;
+        objectRenderRadius = objectSimRadius / fluid_attributes.frame_context.zoom_amount;
     }
 
     void createRandomPositions() {
@@ -259,7 +262,7 @@ public:
             for (int j = objectCellY - objectCellRadius; j < objectCellY + objectCellRadius; j++) {
                 int cellNr = i * fluid_attributes.n + j;
                 bool notInBounds = i < 0 || i > fluid_attributes.numX || j < 0 || j > fluid_attributes.numY;
-                if (notInBounds || (fluid_attributes.cellType[i * fluid_attributes.n + j] == fluid_attributes.SOLID_CELL)) continue;
+                if (notInBounds || (fluid_attributes.cellType[i * fluid_attributes.n + j] == fluid_attributes.SOLID)) continue;
                 float dx = (i + 0.5) * fluid_attributes.cellSpacing - forceObjectX;
                 float dy = (j + 0.5) * fluid_attributes.cellSpacing - forceObjectY;
                 float d2 = dx * dx + dy * dy;
@@ -272,16 +275,16 @@ public:
             
                 float centerT = 1 - edgeT;
                     
-                if (fluid_attributes.cellType[cellNr - fluid_attributes.n] != fluid_attributes.SOLID_CELL) {
+                if (fluid_attributes.cellType[cellNr - fluid_attributes.n] != fluid_attributes.SOLID) {
                     fluid_attributes.u[cellNr] += (dx * strength - fluid_attributes.u[cellNr]) * centerT * fluid_attributes.frame_context.dt;
                 }
-                if (fluid_attributes.cellType[cellNr + fluid_attributes.n] != fluid_attributes.SOLID_CELL) {
+                if (fluid_attributes.cellType[cellNr + fluid_attributes.n] != fluid_attributes.SOLID) {
                     fluid_attributes.u[cellNr + fluid_attributes.n] += (dx * strength - fluid_attributes.u[cellNr + fluid_attributes.n]) * centerT * fluid_attributes.frame_context.dt;
                 }
-                if (fluid_attributes.cellType[cellNr - 1] != fluid_attributes.SOLID_CELL) {
+                if (fluid_attributes.cellType[cellNr - 1] != fluid_attributes.SOLID) {
                     fluid_attributes.v[cellNr] += (dy * strength - fluid_attributes.v[cellNr]) * centerT * fluid_attributes.frame_context.dt;
                 }
-                if (fluid_attributes.cellType[cellNr + 1] != fluid_attributes.SOLID_CELL) {
+                if (fluid_attributes.cellType[cellNr + 1] != fluid_attributes.SOLID) {
                     fluid_attributes.v[cellNr + 1] += (dy * strength - fluid_attributes.v[cellNr + 1]) * centerT * fluid_attributes.frame_context.dt;
                 }
             }
@@ -305,22 +308,22 @@ public:
                 for (int j = objectCellY - objectCellRadius; j < objectCellY + objectCellRadius; j++) {
                     int cellNr = i * fluid_attributes.n + j;
                     bool notInBounds = i < 0 || i > fluid_attributes.numX || j < 0 || j > fluid_attributes.numY;
-                    if (notInBounds || (fluid_attributes.cellType[i * fluid_attributes.n + j] == fluid_attributes.SOLID_CELL)) continue;
+                    if (notInBounds || (fluid_attributes.cellType[i * fluid_attributes.n + j] == fluid_attributes.SOLID)) continue;
                     float dx = (i + 0.5) * fluid_attributes.cellSpacing - objectX;
                     float dy = (j + 0.5) * fluid_attributes.cellSpacing - objectY;
 
                     if (dx * dx + dy * dy < objectSimRadius * objectSimRadius + extend) {
                         
-                        if (fluid_attributes.cellType[cellNr - fluid_attributes.n] != fluid_attributes.SOLID_CELL) {
+                        if (fluid_attributes.cellType[cellNr - fluid_attributes.n] != fluid_attributes.SOLID) {
                             fluid_attributes.u[cellNr] = vx;
                         }
-                        if (fluid_attributes.cellType[cellNr + fluid_attributes.n] != fluid_attributes.SOLID_CELL) {
+                        if (fluid_attributes.cellType[cellNr + fluid_attributes.n] != fluid_attributes.SOLID) {
                             fluid_attributes.u[cellNr + fluid_attributes.n] = vx;
                         }
-                        if (fluid_attributes.cellType[cellNr - 1] != fluid_attributes.SOLID_CELL) {
+                        if (fluid_attributes.cellType[cellNr - 1] != fluid_attributes.SOLID) {
                             fluid_attributes.v[cellNr] = vy;
                         }
-                        if (fluid_attributes.cellType[cellNr + 1] != fluid_attributes.SOLID_CELL) {
+                        if (fluid_attributes.cellType[cellNr + 1] != fluid_attributes.SOLID) {
                             fluid_attributes.v[cellNr + 1] = vy;
                         }
                     }
@@ -372,7 +375,7 @@ public:
                 offset = !offset;
             }
 
-            if (cellX > fluid_attributes.numX || (fluid_attributes.cellType[cellNr] != fluid_attributes.AIR_CELL || prevPx - fluid_attributes.radius < fluid_attributes.cellSpacing || prevPx + fluid_attributes.radius > fluid_attributes.frame_context.WIDTH - fluid_attributes.cellSpacing || prevPy - fluid_attributes.radius < fluid_attributes.cellSpacing)) {
+            if (cellX > fluid_attributes.numX || (fluid_attributes.cellType[cellNr] != fluid_attributes.AIR || prevPx - fluid_attributes.radius < fluid_attributes.cellSpacing || prevPx + fluid_attributes.radius > fluid_attributes.frame_context.WIDTH - fluid_attributes.cellSpacing || prevPy - fluid_attributes.radius < fluid_attributes.cellSpacing)) {
                 continue;
             }
 

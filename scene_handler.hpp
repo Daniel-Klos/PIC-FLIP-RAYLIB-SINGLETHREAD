@@ -63,25 +63,27 @@ struct SceneHandler {
         fluid_attributes.obstaclePositions.resize(numInitObstacles);
         int idx = 0;
         for (int i = 0; i < fluid_attributes.numX; ++i) {
-            fluid_attributes.cellType[i * fluid_attributes.n] = fluid_attributes.SOLID_CELL;
+            fluid_attributes.cellType[i * fluid_attributes.n] = fluid_attributes.SOLID;
             fluid_attributes.obstaclePositions[idx] = Vector2i{i, 0};
             ++idx;
         }
         for (int i = 0; i < fluid_attributes.numX; ++i) {
-            fluid_attributes.cellType[i * fluid_attributes.n + fluid_attributes.numY - 1] = fluid_attributes.SOLID_CELL;
+            fluid_attributes.cellType[i * fluid_attributes.n + fluid_attributes.numY - 1] = fluid_attributes.SOLID;
             fluid_attributes.obstaclePositions[idx] = Vector2i{i, fluid_attributes.numY - 1};
             ++idx;
         }
         for (int j = 1; j < fluid_attributes.numY - 1; ++j) {
-            fluid_attributes.cellType[j] = fluid_attributes.SOLID_CELL;
+            fluid_attributes.cellType[j] = fluid_attributes.SOLID;
             fluid_attributes.obstaclePositions[idx] = Vector2i{0, j};
             ++idx;
         }
         for (int j = 1; j < fluid_attributes.numY - 1; ++j) {
-            fluid_attributes.cellType[fluid_attributes.numX * fluid_attributes.numY + j - fluid_attributes.n] = fluid_attributes.SOLID_CELL;
+            fluid_attributes.cellType[fluid_attributes.numX * fluid_attributes.numY + j - fluid_attributes.n] = fluid_attributes.SOLID;
             fluid_attributes.obstaclePositions[idx] = Vector2i{fluid_attributes.numX - 1, j};
             ++idx;
         }
+
+        obstacle_handler.FastSweep();
         // ----------------------------------------------------------------------------------------------------------------------------
 
 
@@ -154,13 +156,15 @@ struct SceneHandler {
         // final product, but for now start implementing the features after FillCollisionGrid and ModifyParticlePositions. Keep FillCollisionGrid when this is all
         //fluid_handler.pressure_solver.project_density_implicit();
 
-        fluid_handler.FillCollisionGrid();
+        //fluid_handler.transfer_grid.updateCellDensitiesMulti();
 
         HandleUserInteraction();
 
         ModifyParticlePositions();
+
         // have to update cell densities AFTER im done modifying all positions, but with IDP, the algorithm will modify all positions (walls & pp), so i wont have to worry about modifyparticlepositions anymore
         fluid_handler.transfer_grid.updateCellDensitiesMulti();
+        //fluid_handler.density_solver.HandleDegenerateConditions();
 
         fluid_handler.transfer_grid.TransferToGrid();
 
@@ -188,11 +192,13 @@ struct SceneHandler {
 
 
     void ModifyParticlePositions() {
+        fluid_handler.FillCollisionGrid();
         fluid_handler.solveCollisions();
 
-        obstacle_handler.collideSurfacesMulti();
+        obstacle_handler.CollideSurfaces();
 
-        obstacle_handler.constrainWallsMulti();
+        //obstacle_handler.constrainWallsMulti();
+        fluid_handler.FillCollisionGrid();
     }
 
 

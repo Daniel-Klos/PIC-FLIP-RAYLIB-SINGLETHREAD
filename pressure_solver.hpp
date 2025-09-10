@@ -7,9 +7,9 @@ struct PressureSolver {
     int n;
     int gridSize;
     int numPressureIters = 40;
-    int FLUID_CELL = fluid_attributes.FLUID_CELL;
-    int AIR_CELL = fluid_attributes.AIR_CELL;
-    int SOLID_CELL = fluid_attributes.SOLID_CELL;
+    int FLUID = fluid_attributes.FLUID;
+    int AIR = fluid_attributes.AIR;
+    int SOLID = fluid_attributes.SOLID;
 
     float k = 10.f;
     float overRelaxation = 1.9f;
@@ -52,12 +52,12 @@ struct PressureSolver {
         for (int i = start; i < stop; ++i) {
             for (int j = (i + red) % 2; j < fluid_attributes.numY - 1; j += 2) {
                 int idx = i * n + j;
-                if (fluid_attributes.cellType[idx] != FLUID_CELL) continue;
+                if (fluid_attributes.cellType[idx] != FLUID) continue;
 
-                float leftType = fluid_attributes.cellType[idx - n] <= AIR_CELL ? 1 : 0;
-                float rightType = fluid_attributes.cellType[idx + n] <= AIR_CELL ? 1 : 0;
-                float topType = fluid_attributes.cellType[idx - 1] <= AIR_CELL ? 1 : 0;
-                float bottomType = fluid_attributes.cellType[idx + 1] <= AIR_CELL ? 1 : 0;
+                float leftType = fluid_attributes.cellType[idx - n] <= AIR ? 1 : 0;
+                float rightType = fluid_attributes.cellType[idx + n] <= AIR ? 1 : 0;
+                float topType = fluid_attributes.cellType[idx - 1] <= AIR ? 1 : 0;
+                float bottomType = fluid_attributes.cellType[idx + 1] <= AIR ? 1 : 0;
 
                 float divideBy = leftType + rightType + topType + bottomType;
             
@@ -121,7 +121,7 @@ struct PressureSolver {
         for (int32_t i = 1; i < fluid_attributes.numX - 1; ++i) {
             for (int32_t j = 1; j < fluid_attributes.numY - 1; ++j) {
                 int32_t idx = i * n + j;
-                if (fluid_attributes.cellType[idx] != FLUID_CELL)  {
+                if (fluid_attributes.cellType[idx] != FLUID)  {
                     continue;
                 }
 
@@ -146,7 +146,7 @@ struct PressureSolver {
 
     void ScaledAdd(std::vector<double> &a, std::vector<double> &b, double c, int start, int end) {
         for (int i = start; i < end; ++i) {
-            if (fluid_attributes.cellType[i] == FLUID_CELL) {
+            if (fluid_attributes.cellType[i] == FLUID) {
                 a[i] += b[i] * c;
             }
         }
@@ -177,7 +177,7 @@ struct PressureSolver {
 
     void Dot(std::vector<double> &a, std::vector<double> &b, int start, int end, double &res) {
         for (int i = start; i < end; ++i) {
-            if (fluid_attributes.cellType[i] == FLUID_CELL) {
+            if (fluid_attributes.cellType[i] == FLUID) {
                 res += a[i] * b[i];
             }
         }
@@ -191,7 +191,7 @@ struct PressureSolver {
 
     void EqualsPlusTimes(std::vector<double> &a, std::vector<double> &b, double c, int start, int end) {
         for (int i = start; i < end; ++i) {
-            if (fluid_attributes.cellType[i] == FLUID_CELL) {
+            if (fluid_attributes.cellType[i] == FLUID) {
                 a[i] = b[i] + a[i] * c;
             }
         }
@@ -227,15 +227,15 @@ struct PressureSolver {
                 int leftIdx =  idx - n;
                 int upIdx = idx - 1;
 
-                if ((fluid_attributes.cellType[idx] == FLUID_CELL || fluid_attributes.cellType[leftIdx] == FLUID_CELL) &&
-                    fluid_attributes.cellType[idx] != SOLID_CELL && fluid_attributes.cellType[leftIdx] != SOLID_CELL) {
+                if ((fluid_attributes.cellType[idx] == FLUID || fluid_attributes.cellType[leftIdx] == FLUID) &&
+                    fluid_attributes.cellType[idx] != SOLID && fluid_attributes.cellType[leftIdx] != SOLID) {
                     float p = pressure[idx];
                     float pLeft = pressure[leftIdx];
                     fluid_attributes.u[idx] -= 1 * (p - pLeft);
                 }
     
-                if ((fluid_attributes.cellType[idx] == FLUID_CELL || fluid_attributes.cellType[upIdx] == FLUID_CELL) &&
-                    fluid_attributes.cellType[idx] != SOLID_CELL && fluid_attributes.cellType[upIdx] != SOLID_CELL) {
+                if ((fluid_attributes.cellType[idx] == FLUID || fluid_attributes.cellType[upIdx] == FLUID) &&
+                    fluid_attributes.cellType[idx] != SOLID && fluid_attributes.cellType[upIdx] != SOLID) {
                     float p = pressure[idx];
                     float pTop = pressure[upIdx];
                     fluid_attributes.v[idx] -= 1 * (p - pTop);
@@ -256,18 +256,18 @@ struct PressureSolver {
                 return fluid_attributes.cellType[idx - 1];
         }
 
-        return SOLID_CELL; // should never get executed
+        return SOLID; // should never get executed
     }
 
     uint8_t updateNbrFromNeighbor(uint8_t material, uint8_t nbr_info, uint8_t dir) {
 
         // if neighbor cell is fluid or air, add to the first 3 bits
-        if (material != SOLID_CELL) {
+        if (material != SOLID) {
             nbr_info++;
         }
 
         // if neighbor cell is not fluid, end here
-        if (material != FLUID_CELL) {
+        if (material != FLUID) {
             return nbr_info;
         }
 
@@ -279,7 +279,7 @@ struct PressureSolver {
         for (int i = 1; i < fluid_attributes.numX - 1; ++i) {
             for (int j = 1; j < fluid_attributes.numY - 1; ++j) {
                 int idx = i * n + j;
-                if (fluid_attributes.cellType[idx] != FLUID_CELL) continue;
+                if (fluid_attributes.cellType[idx] != FLUID) continue;
 
                 uint8_t nbr_info = 0u;
                 for (uint8_t dir : directions) {

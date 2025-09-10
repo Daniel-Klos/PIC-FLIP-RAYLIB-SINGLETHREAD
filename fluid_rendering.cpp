@@ -157,11 +157,9 @@ void FluidRenderer::UpdateParticlePositionsMulti(int start, int end) {
 
 // colors ------------------------------------------------------------------------------------------------------------
 void FluidRenderer::GetParticleDiffusionColor(int particleIdx, int &r, int &g, int &b) {
-    const float s = 0.8f;
-
-    particleDiffusionColors[3 * particleIdx] = clamp(particleDiffusionColors[3 * particleIdx] - s, 0, 255);
-    particleDiffusionColors[3 * particleIdx + 1] = clamp(particleDiffusionColors[3 * particleIdx + 1] - s, 0, 255);
-    particleDiffusionColors[3 * particleIdx + 2] = clamp(particleDiffusionColors[3 * particleIdx + 2] + s, 0, 255);
+    particleDiffusionColors[3 * particleIdx] = clamp(particleDiffusionColors[3 * particleIdx] - resetRate, 0, 255);
+    particleDiffusionColors[3 * particleIdx + 1] = clamp(particleDiffusionColors[3 * particleIdx + 1] - resetRate, 0, 255);
+    particleDiffusionColors[3 * particleIdx + 2] = clamp(particleDiffusionColors[3 * particleIdx + 2] + resetRate, 0, 255);
 
     const int xi = clamp(std::floor(fluid_attributes.positions[2 * particleIdx] * invSpacing), 1, fluid_attributes.numX - 1);
     const int yi = clamp(std::floor(fluid_attributes.positions[2 * particleIdx + 1] * invSpacing), 1, fluid_attributes.numY - 1);

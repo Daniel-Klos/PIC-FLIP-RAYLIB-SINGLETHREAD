@@ -14,10 +14,10 @@ int main()
     // vorticitystrength is how strong vorticity confinement forces are if you choose to include that in the sim 
     // maxFps sets the deltaTime for the simulation and the framerate for the window
 
-    int numParticles = 30000; // 20000 --- start with a kinda large number so that good density sample is taken at the start of the simulation
+    int numParticles = 30000; // 30000 --- start with a kinda large number so that good density sample is taken at the start of the simulation
     float gravityY = 5500.f; // 5500
     float gravityX = 0.f;
-    int gridNumX = 250; // 348
+    int gridNumX = 250; // 250
     float flipRatio = 0.9f; // 0.9f
     float vorticityStrength = 0.f;
     int maxFps = 120;
@@ -28,10 +28,6 @@ int main()
     int HEIGHT = 1300;
 
     InitWindow(WIDTH, HEIGHT, "Flip Fluid");
-
-    /*WIDTH = GetRenderWidth();
-    HEIGHT = GetRenderHeight();
-    SetWindowSize(WIDTH, HEIGHT);*/
 
     FluidState fluid_attributes = FluidState(numParticles, gridNumX, vorticityStrength, flipRatio, gravityX, gravityY, WIDTH, HEIGHT);
 

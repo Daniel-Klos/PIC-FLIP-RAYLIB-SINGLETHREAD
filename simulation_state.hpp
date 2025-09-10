@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 
+#include "collision_grid.hpp"
 #include "frame_context.hpp"
 #include "utils.hpp"
 
@@ -55,16 +56,15 @@ struct FluidState {
     float fireStrength = 30.f;         // how quickly particles accelerate upwards due to heat
     float tempDiffusion = 50.f;        // how quickly particles lose heat
 
-    int FLUID_CELL = 0;
-    int AIR_CELL = 1;
-    int SOLID_CELL = 2;
+    int FLUID = 0;
+    int AIR = 1;
+    int SOLID = 2;
 
     FrameContext frame_context;
 
-    FluidState(int num_particles_, int numX_, float vorticityStrength_, float flipRatio_, float gravityX_, float gravityY_, float simWIDTH, float simHEIGHT): num_particles(num_particles_), numX(numX_), vorticityStrength(vorticityStrength_), flipRatio(flipRatio_), gravityX(gravityX_), gravityY(gravityY_), frame_context(simWIDTH, simHEIGHT) {
+    CollisionGrid cellOccupants;
 
-        particleAges.resize(num_particles);
-        std::fill(begin(particleAges), end(particleAges), 0);
+    FluidState(int num_particles_, int numX_, float vorticityStrength_, float flipRatio_, float gravityX_, float gravityY_, float simWIDTH, float simHEIGHT): num_particles(num_particles_), numX(numX_), vorticityStrength(vorticityStrength_), flipRatio(flipRatio_), gravityX(gravityX_), gravityY(gravityY_), frame_context(simWIDTH, simHEIGHT) {
 
         cellSpacing = frame_context.WIDTH / numX;
         halfSpacing = cellSpacing * 0.5;
@@ -74,6 +74,11 @@ struct FluidState {
         numY = std::floor(frame_context.HEIGHT / cellSpacing);
         n = numY;
         gridSize = numX * numY;
+
+        particleAges.resize(num_particles);
+        std::fill(begin(particleAges), end(particleAges), 0);
+
+        cellOccupants = CollisionGrid(numX, numY);
 
         positions.resize(2 * num_particles);
         renderPositions.resize(2 * num_particles);
@@ -122,6 +127,30 @@ struct FluidState {
         }
     }
 
+    void FillCellOccupants() {
+        cellOccupants.clear();
+
+        const float minX = cellSpacing;
+        const float maxX = frame_context.WIDTH - cellSpacing;
+        const float minY = cellSpacing;
+        const float maxY = frame_context.HEIGHT - cellSpacing;
+
+        uint32_t i{0};
+
+        for (int32_t index = 0; index < num_particles; ++index) {
+            float x = positions[2 * index];
+            float y = positions[2 * index + 1];
+            if (x > minX && x < maxX && y > minY && y < maxY) {
+                
+                int32_t cellOccupantsX = x / cellSpacing;
+                int32_t cellOccupantsY = y / cellSpacing;
+                cellOccupants.addAtom(cellOccupantsX, cellOccupantsY, i);
+
+            }
+            ++i;
+        }
+    }
+
     float curl(int i, int j) {
         int idx = i * n + j;
         const float denom = 1.f / (2.f * cellSpacing);
@@ -140,11 +169,12 @@ struct FluidState {
         return curl * curl; // std::abs for just curl
     }
 
+    // Returns world coordinates to the top left of the cell
     Vector2 gridCellToPos(int idx) {
         int i = idx % numY;
         int j = idx / numY;
-        float x = halfSpacing + (j * cellSpacing);
-        float y = halfSpacing + (i * cellSpacing);
+        float x = j * cellSpacing;
+        float y = i * cellSpacing;
         return Vector2{x, y};
     }
 
