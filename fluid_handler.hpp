@@ -80,7 +80,7 @@ public:
         }
     }
 
-    void integrate() {
+    void Advect() {
         for (int i = 0; i < fluid_attributes.num_particles; ++i) {
             fluid_attributes.positions[2 * i] += fluid_attributes.velocities[2 * i] * fluid_attributes.frame_context.dt;
             fluid_attributes.positions[2 * i + 1] += fluid_attributes.velocities[2 * i + 1] * fluid_attributes.frame_context.dt;
@@ -88,12 +88,33 @@ public:
             fluid_attributes.velocities[2 * i + 1] += fluid_attributes.gravityY * fluid_attributes.frame_context.dt;
 
             fluid_attributes.particleAges[i] = std::min(fluid_attributes.age_constant, fluid_attributes.particleAges[i] + 1);
+        }
+    }
 
-            /*if (fluid_attributes.densities[i] > 0) {
-                float buoyancy = fluid_attributes.gravityY * (1 - (fluid_attributes.particle_densities[i] / fluid_attributes.densities[i]));
-                //float buoyancy = fluid_attributes.gravityY * (fluid_attributes.densities[i] - fluid_attributes.particle_densities[i]) / fluid_attributes.particleRestDensity;
-                fluid_attributes.velocities[2 * i + 1] += buoyancy * dt;
-            }*/
+    void MarkAirAndFluidCells() {
+        for (int i = 0; i < fluid_attributes.numX; ++i) {
+            for (int j = 0; j < fluid_attributes.numY; ++j) {
+                int idx = i * fluid_attributes.numY + j;
+                if (fluid_attributes.cellType[idx] != fluid_attributes.SOLID) {
+                    fluid_attributes.cellType[idx] = fluid_attributes.AIR;
+                }
+            }
+        }
+
+        fluid_attributes.num_fluid_cells = 0;
+        for (int i = 0; i < fluid_attributes.num_particles; ++i) {
+            float x = fluid_attributes.positions[2 * i];
+            float y = fluid_attributes.positions[2 * i + 1];
+
+            int xi = clamp(std::floor(x * fluid_attributes.invSpacing), 0, fluid_attributes.numX - 1);
+            int yi = clamp(std::floor(y * fluid_attributes.invSpacing), 0, fluid_attributes.numY - 1);
+
+            int cellNr = xi * fluid_attributes.numY + yi;
+            if (fluid_attributes.cellType[cellNr] == fluid_attributes.AIR) {
+                fluid_attributes.cellType[cellNr] = fluid_attributes.FLUID;
+                fluid_attributes.fluid_cells[fluid_attributes.num_fluid_cells] = cellNr;
+                fluid_attributes.num_fluid_cells++;
+            }
         }
     }
 
@@ -103,12 +124,43 @@ public:
         const float rightEdge = fluid_attributes.frame_context.WIDTH * (1.0f - percentRemoved);
         for (int i = 0; i < fluid_attributes.num_particles; ++i) {
             if (fluid_attributes.positions[2 * i + 1] + fluid_attributes.radius > fluid_attributes.frame_context.HEIGHT - 2 * fluid_attributes.cellSpacing) {
-                if ((fluid_renderer.renderPattern == 3 && fluid_attributes.temperatures[i] < fluid_renderer.tempGradient.size()) || (fluid_attributes.positions[2 * i] > leftEdge && fluid_attributes.positions[2 * i] < rightEdge)) {
+                if ((fluid_attributes.temperatures[i] < fluid_renderer.tempGradient.size()) || (fluid_attributes.positions[2 * i] > leftEdge && fluid_attributes.positions[2 * i] < rightEdge)) {
                     fluid_attributes.temperatures[i] += fluid_attributes.groundConductivity * fluid_attributes.frame_context.dt;
                 }
             }
         }
     }
+
+    // loop over all cells
+        // calculate an aggregate temperature for each cell (for the cell center)
+        // by looping over all particles and calculating mean particle temperature or something
+    // loop over all cells again
+        // for each particle, lerp a value for surround_temp from surrounding cells
+            // remember to offset:
+                // int x = pos.x;
+                // int y = pos.y;
+
+                // float gx = x / fas.cellSpacing - 0.5f;
+                // float gy = y / fas.cellSpacing - 0.5f;
+            // temperatures[i] += surround_temp * fluid_attributes.interConductivity * dt
+    /*void DiffuseHeat() {
+        for (int i = 0; i < fluid_attributes.num_fluid_cells; ++i) {
+            auto &cell = fluid_attributes.cellOccupants.data[i];
+
+            // loop over all cells and calculate an aggregate temperature (for the cell center)
+            
+            for (int id = 0; id < cell.objects_count; ++id) {
+                int pIdx = cell.objects[id];
+
+                const float transfer = (fluid_attributes.temperatures[index] - fluid_attributes.temperatures[otherIndex]) * fluid_attributes.interConductivity * fluid_attributes.frame_context.dt;
+                
+                fluid_attributes.temperatures[index] -= transfer * fluid_attributes.frame_context.dt;
+                fluid_attributes.temperatures[otherIndex] += transfer * fluid_attributes.frame_context.dt;
+
+                collisions[index]++;
+                collisions[otherIndex]++;
+        }
+    }*/
 
     void makeFire() {
         for (int i = 0; i < fluid_attributes.num_particles; ++i) {
@@ -169,6 +221,7 @@ public:
             fluid_attributes.positions[2 * otherIndex + 1] -= col_vecY;
 
             const float transfer = (fluid_attributes.temperatures[index] - fluid_attributes.temperatures[otherIndex]) * fluid_attributes.interConductivity * fluid_attributes.frame_context.dt;
+
             fluid_attributes.temperatures[index] -= transfer * fluid_attributes.frame_context.dt;
             fluid_attributes.temperatures[otherIndex] += transfer * fluid_attributes.frame_context.dt;
 
@@ -211,6 +264,7 @@ public:
         if (fluid_attributes.fireActive) {
             std::fill(begin(collisions), end(collisions), 0);
         }
+        FillCollisionGrid();
 
         const uint32_t slice_size = collisionGrid.width * collisionGrid.height;
         
@@ -397,6 +451,7 @@ public:
         fluid_renderer.particleDiffusionColors.resize(3 * fluid_attributes.num_particles);
 
         fluid_attributes.particleAges.resize(fluid_attributes.num_particles);
+        //fluid_attributes.debug.resize(fluid_attributes.num_particles);
 
         int start = fluid_attributes.num_particles - addedTo;
 
@@ -480,6 +535,7 @@ public:
         fluid_attributes.positions.resize(2 * fluid_attributes.num_particles);
         fluid_attributes.renderPositions.resize(2 * fluid_attributes.num_particles);
         fluid_attributes.velocities.resize(2 * fluid_attributes.num_particles);
+        //fluid_attributes.debug.resize(fluid_attributes.num_particles);
     
         this->collisions.resize(fluid_attributes.num_particles);
         fluid_attributes.temperatures.resize(fluid_attributes.num_particles);

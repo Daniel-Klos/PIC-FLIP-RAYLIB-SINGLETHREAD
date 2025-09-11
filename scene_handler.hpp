@@ -121,6 +121,8 @@ struct SceneHandler {
 
         track_key_events();
         track_mouse_events();
+
+        HandleUserInteraction();
             
         if (!fluid_attributes.stop || fluid_attributes.step) {
             std::copy(begin(fluid_attributes.positions), end(fluid_attributes.positions), begin(fluid_attributes.renderPositions));
@@ -149,28 +151,22 @@ struct SceneHandler {
         
     }
 
+    // move all this into fluid_handler. move obstacle_handler into fluid_handler too
     void update_environment() {
 
-        fluid_handler.integrate();
-
-        // final product, but for now start implementing the features after FillCollisionGrid and ModifyParticlePositions. Keep FillCollisionGrid when this is all
-        //fluid_handler.pressure_solver.project_density_implicit();
-
-        //fluid_handler.transfer_grid.updateCellDensitiesMulti();
-
-        HandleUserInteraction();
+        fluid_handler.Advect();
 
         ModifyParticlePositions();
 
-        // have to update cell densities AFTER im done modifying all positions, but with IDP, the algorithm will modify all positions (walls & pp), so i wont have to worry about modifyparticlepositions anymore
-        fluid_handler.transfer_grid.updateCellDensitiesMulti();
-        //fluid_handler.density_solver.HandleDegenerateConditions();
+        fluid_handler.MarkAirAndFluidCells();
+
+        fluid_handler.density_solver.ProjectDensity();
 
         fluid_handler.transfer_grid.TransferToGrid();
 
         ApplyBodyForces();
         
-        fluid_handler.pressure_solver.projectRedBlackSORMulti(fluid_handler.pressure_solver.numPressureIters);
+        fluid_handler.pressure_solver.ProjectPressure();
 
         fluid_handler.transfer_grid.TransferToParticles();
     }
@@ -192,13 +188,9 @@ struct SceneHandler {
 
 
     void ModifyParticlePositions() {
-        fluid_handler.FillCollisionGrid();
-        fluid_handler.solveCollisions();
+        //fluid_handler.solveCollisions();
 
         obstacle_handler.CollideSurfaces();
-
-        //obstacle_handler.constrainWallsMulti();
-        fluid_handler.FillCollisionGrid();
     }
 
 
@@ -210,10 +202,10 @@ struct SceneHandler {
         } if (fluid_handler.forceObjectActive && fluid_attributes.frame_context.rightMouseDown) { // force push
             fluid_handler.includeForceObject(1000); // pushing, 1000
         }
-        if (fluid_handler.fluid_renderer.getRenderPattern() == 4 && fluid_attributes.fireActive) {     // applying buoyant force to high temperature partiles
+        if (fluid_handler.fluid_renderer.getRenderPattern() == 3 && fluid_attributes.fireActive) {     // applying buoyant force to high temperature partiles
             fluid_handler.makeFire();
         }
-        if (fluid_handler.fluid_renderer.getRenderPattern() == 4) {                              // ground->particle thermal conducting. I just lump it in here but it's not an actual force
+        if (fluid_handler.fluid_renderer.getRenderPattern() == 3) {                              // ground->particle thermal conducting. I just lump it in here but it's not an actual force
             fluid_handler.heatGround();                                                          // note that particle->particle thermal conducting is handled in fluid_handler.solveCollisions()
         }
         if (fluid_attributes.vorticityStrength != 0) {           // vorticity confinement

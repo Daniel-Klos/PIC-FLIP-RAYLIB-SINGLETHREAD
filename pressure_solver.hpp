@@ -64,26 +64,26 @@ struct PressureSolver {
                 if (divideBy == 0.f) continue;
 
                 float divergence = fluid_attributes.u[idx + n] - fluid_attributes.u[idx] + fluid_attributes.v[idx + 1] - fluid_attributes.v[idx];
-                if (fluid_attributes.particleRestDensity > 0.f) {
+                /*if (fluid_attributes.particleRestDensity > 0.f) {
                     float compression = fluid_attributes.cellDensities[idx] - fluid_attributes.particleRestDensity;
                     if (compression > 0.f) {
                         divergence -= k * compression;
                     }
-                }
+                }*/
 
                 float p = divergence / divideBy;
                 p *= overRelaxation;
 
-                fluid_attributes.u[idx] += leftType * p;
+                fluid_attributes.u[idx]     += leftType * p;
                 fluid_attributes.u[idx + n] -= rightType * p;
-                fluid_attributes.v[idx] += topType * p;
+                fluid_attributes.v[idx]     += topType * p;
                 fluid_attributes.v[idx + 1] -= bottomType * p;
             }
         }
     }
 
-    void projectRedBlackSORMulti(int numIters) {
-        for (int iter = 0; iter < numIters; ++iter) {
+    void ProjectPressure() {
+        for (int iter = 0; iter < numPressureIters; ++iter) {
             passRedBlackSOR(1, fluid_attributes.numX - 1, 0);
             passRedBlackSOR(1, fluid_attributes.numX - 1, 1);
         }

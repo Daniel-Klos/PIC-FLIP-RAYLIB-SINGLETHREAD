@@ -40,6 +40,8 @@ public:
 
     void GetParticleDensityColor(int particleIdx, int &r, int &g, int &b);
 
+    void GetParticleDebugColor(int particleIdx, int &r, int &g, int &b);
+
     void writeColor(int vertexIdx, int r, int g, int b);
 
     void writeColors(int start, int end);
@@ -62,7 +64,7 @@ public:
     int n;
     float radius;
     float invSpacing;
-    int32_t renderPattern = 1;
+    int32_t renderPattern = 0;
 
     const float resetRate = 2.f;
     const float diffusionRatio = 0.75f; // 0.75
@@ -79,8 +81,6 @@ public:
     std::vector<unsigned short> particleIndices = {0};
 
     std::vector<float> particleDiffusionColors;
-
-    std::vector<bool> debug_condition;
 
     std::array<std::array<int, 3>, 100> velGradient;
     std::array<std::array<int, 3>, 4> velColorMap {{{50, 0, 255}, {225, 0, 225}, {255, 225, 100}, {255, 255, 125}}};

@@ -23,8 +23,10 @@ struct FluidState {
     std::vector<float> prevU;
     std::vector<float> prevV;
     std::vector<float> cellDensities;
+    std::vector<float> cellVolumes;
     std::vector<int> fluid_cells;
     std::vector<Vector2i> obstaclePositions;
+    std::vector<float> phi;
     std::vector<int> particleAges;
 
     float cellSpacing;
@@ -55,6 +57,8 @@ struct FluidState {
     float interConductivity = 10000.f;    // how quickly particles transfer heat between themselves
     float fireStrength = 30.f;         // how quickly particles accelerate upwards due to heat
     float tempDiffusion = 50.f;        // how quickly particles lose heat
+
+    //std::vector<bool> debug; // for any debug condition you want, just set pIdx = 1
 
     int FLUID = 0;
     int AIR = 1;
@@ -92,8 +96,10 @@ struct FluidState {
         prevU.resize(gridSize);
         prevV.resize(gridSize);
         cellDensities.resize(gridSize);
+        cellVolumes.resize(gridSize);
         fluid_cells.resize(gridSize);
 
+        //debug.resize(num_particles);
         
         // initializing particle positions
         float separation = 2.1; 
@@ -127,27 +133,21 @@ struct FluidState {
         }
     }
 
-    void FillCellOccupants() {
-        cellOccupants.clear();
+    void GetStaggeredGridPositions(float px, float py, int& x0, int& x1, int& y0, int& y1, int component) {
 
-        const float minX = cellSpacing;
-        const float maxX = frame_context.WIDTH - cellSpacing;
-        const float minY = cellSpacing;
-        const float maxY = frame_context.HEIGHT - cellSpacing;
+        // if you ever implement extrapolation, see if this bug goes away
+        x0 = std::max(1, std::min(static_cast<int>(std::floor(px * invSpacing)), numX - 2));
+        x1 = std::min(x0 + 1, numX - 2); // <- see if you can make this 1
+    
+        y0 = std::max(1, std::min(static_cast<int>(std::floor(py * invSpacing)), numY - 2));
+        y1 = std::min(y0 + 1, numY - 1);
 
-        uint32_t i{0};
-
-        for (int32_t index = 0; index < num_particles; ++index) {
-            float x = positions[2 * index];
-            float y = positions[2 * index + 1];
-            if (x > minX && x < maxX && y > minY && y < maxY) {
-                
-                int32_t cellOccupantsX = x / cellSpacing;
-                int32_t cellOccupantsY = y / cellSpacing;
-                cellOccupants.addAtom(cellOccupantsX, cellOccupantsY, i);
-
-            }
-            ++i;
+        // this stops the fluid touching the left wall from going down
+        if (component == 0 && x0 == 1) { // ceiling
+            x0 = x1;
+        }
+        if (component == 1 && x0 == 1) { // left wall
+            x1 = x0;
         }
     }
 

@@ -7,8 +7,6 @@ struct ObstacleHandler {
     FluidState &fas;
     ObstacleRenderer &obstacle_renderer;
 
-    std::vector<float> phi;
-
     int pencilRadius = 1;
 
     bool solidDrawing = false;
@@ -17,7 +15,7 @@ struct ObstacleHandler {
     float floorPos;
 
     ObstacleHandler(FluidState &fluid_attributes, ObstacleRenderer &ore): fas(fluid_attributes), obstacle_renderer(ore) {
-        phi.resize(fas.gridSize);
+        fas.phi.resize(fas.gridSize);
 
         rightWallPos = (fas.numX - 1) * fas.cellSpacing;
         floorPos     = (fas.numY - 1) * fas.cellSpacing;
@@ -26,10 +24,10 @@ struct ObstacleHandler {
     void SetUpPhi() {
         for (int i = 0; i < fas.gridSize; ++i) {
             if (fas.cellType[i] == fas.SOLID) {
-                phi[i] = 1e10f;
+                fas.phi[i] = 1e10f;
             }
             else {
-                phi[i] = 0.f;
+                fas.phi[i] = 0.f;
             }
         }
     }
@@ -51,40 +49,42 @@ struct ObstacleHandler {
             for (ix = dirX[s][0]; dirX[s][2] * ix <= dirX[s][1]; ix += dirX[s][2]) {
                 for (iy = dirY[s][0]; dirY[s][2] * iy <= dirY[s][1]; iy += dirY[s][2]) {
                     gridPos = ix * fas.numY + iy;
-                    int left   = gridPos - fas.numY;
-                    int right  = gridPos + fas.numY;
-                    int top    = gridPos - 1;
-                    int bottom = gridPos + 1;
+
+                    float center = fas.phi[gridPos];
+                    float left   = fas.phi[gridPos - fas.numY];
+                    float right  = fas.phi[gridPos + fas.numY];
+                    float top    = fas.phi[gridPos - 1];
+                    float bottom = fas.phi[gridPos + 1];
 
                     if (fas.cellType[gridPos] == fas.SOLID) {
                         if (iy == 0 || iy == (fas.numY - 1)) {
                             if (iy == 0) {
-                                aa[1] = phi[gridPos] < phi[bottom] ? phi[gridPos] : phi[bottom];
+                                aa[1] = center < bottom ? center : bottom;
                             }
                                 if (iy == (fas.numY - 1)) {
-                                aa[1] = phi[top] < phi[gridPos] ? phi[top] : phi[gridPos];
+                                aa[1] = top < center ? top : center;
                             }
                         }
                         else {
-                            aa[1] = phi[top] < phi[bottom] ? phi[top] : phi[bottom];
+                            aa[1] = top < bottom ? top : bottom;
                         }
                     
                         if (ix == 0 || ix == (fas.numX - 1)) {
                             if (ix == 0) {
-                                aa[0] = phi[gridPos] < phi[right] ? phi[gridPos] : phi[right];
+                                aa[0] = center < right ? center : right;
                             }
                             if (ix == (fas.numX - 1)) {
-                                aa[0] = phi[left] < phi[gridPos] ? phi[left] : phi[gridPos];
+                                aa[0] = left < center ? left : center;
                             }
                         }
                         else {
-                            aa[0] = phi[left] < phi[right] ? phi[left] : phi[right];
+                            aa[0] = left < right ? left : right;
                         }
                     
                         a = aa[0]; b = aa[1];
                         d_new = (fabs(a - b) < f * h ? (a + b + sqrt(2.0 * f * f * h * h - (a - b) * (a - b))) * 0.5 : std::fminf(a, b) + f * h);
                     
-                        phi[gridPos] = phi[gridPos] < d_new ? phi[gridPos] : d_new;
+                        fas.phi[gridPos] = center < d_new ? center : d_new;
                     }
                 }
             }
@@ -111,10 +111,10 @@ struct ObstacleHandler {
         int bottomLeft  = i0 * fas.numY + j1;
         int bottomRight = i1 * fas.numY + j1;
 
-        float topLeftVal     = phi[topLeft];
-        float topRightVal    = phi[topRight];
-        float bottomLeftVal  = phi[bottomLeft];
-        float bottomRightVal = phi[bottomRight];
+        float topLeftVal     = fas.phi[topLeft];
+        float topRightVal    = fas.phi[topRight];
+        float bottomLeftVal  = fas.phi[bottomLeft];
+        float bottomRightVal = fas.phi[bottomRight];
 
         float v0 = (1 - fx) * topLeftVal    + fx * topRightVal;
         float v1 = (1 - fx) * bottomLeftVal + fx * bottomRightVal;

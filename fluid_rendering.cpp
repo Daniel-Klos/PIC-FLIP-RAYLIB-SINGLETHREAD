@@ -28,8 +28,6 @@ FluidRenderer::FluidRenderer(FluidState &fas): fluid_attributes(fas)
     particleMaterial.maps[MATERIAL_MAP_DIFFUSE].texture = particleTexture;
 
     initializeColorMaps();
-
-    debug_condition.resize(fluid_attributes.num_particles);
 }
 
 
@@ -165,8 +163,22 @@ void FluidRenderer::GetParticleDiffusionColor(int particleIdx, int &r, int &g, i
     const int yi = clamp(std::floor(fluid_attributes.positions[2 * particleIdx + 1] * invSpacing), 1, fluid_attributes.numY - 1);
     const int cellNr = xi * n + yi;
 
-    const float d0 = fluid_attributes.particleRestDensity;
+    // this just says, if a particle is near a wall, don't let it become white. Shouldn't need this in a perfect fluid sim
+    // (fixes problem of particles always being white next to walls because boundary is pushing them too far out
+    //  and making near-solid walls have too little density)
+    auto &cellTypes = fluid_attributes.cellType;
+    if (cellTypes[cellNr - fluid_attributes.numY] == fluid_attributes.SOLID ||
+        cellTypes[cellNr + fluid_attributes.numY] == fluid_attributes.SOLID ||
+        cellTypes[cellNr - 1]                     == fluid_attributes.SOLID ||
+        cellTypes[cellNr + 1]                     == fluid_attributes.SOLID) 
+    {
+        r = particleDiffusionColors[3 * particleIdx];
+        g = particleDiffusionColors[3 * particleIdx + 1];
+        b = particleDiffusionColors[3 * particleIdx + 2];   
+        return;
+    }
 
+    const float d0 = fluid_attributes.particleRestDensity;
     if (d0 > 0.f && fluid_attributes.particleAges[particleIdx] > fluid_attributes.age_constant - 1) {
         const float relDensity = this->fluid_attributes.cellDensities[cellNr] / d0;
         if (relDensity > 0 && relDensity < diffusionRatio) { 
@@ -240,6 +252,19 @@ void FluidRenderer::GetParticleDensityColor(int particleIdx, int &r, int &g, int
 }
 
 
+/*void FluidRenderer::GetParticleDebugColor(int particleIdx, int &r, int &g, int &b) {
+    if (fluid_attributes.debug[particleIdx]) {
+        r = 0;
+        g = 255;
+        b = 0;
+    }
+    else {
+        r = 255;
+        g = 0;
+        b = 0;
+    }
+}*/
+
 
 void FluidRenderer::writeColor(int vertexIdx, int r, int g, int b) {
     for (int v = 0; v < 4; ++v) {
@@ -261,21 +286,24 @@ void FluidRenderer::writeColors(int start, int end) {
         int g = 0;
         int b = 0;
         switch (renderPattern) {
-            case 1:
+            case 0:
                 GetParticleDiffusionColor(i, r, g, b);
                 break;
-            case 2:
+            case 1:
                 GetParticleVelocityColor(i, r, g, b);
                 break;
-            case 3:
+            case 2:
                 GetParticleVorticityColor(i, r, g, b);
                 break;
-            case 4:
+            case 3:
                 GetParticleTemperatureColor(i, r, g, b);
                 break;
-            case 0:
+            case 4:
                 GetParticleDensityColor(i, r, g, b);
                 break;
+            /*case 5:
+                GetParticleDebugColor(i, r, g, b);
+                break;*/
         }
 
         writeColor(vertexIdx, r, g, b);
@@ -352,14 +380,14 @@ void FluidRenderer::render_fluid() {
 
     DrawParticles();
 
-    //std::fill(begin(debug_condition), end(debug_condition), false);
+    //std::fill(begin(fluid_attributes.debug), end(fluid_attributes.debug), false);
 }
 
 
 
 void FluidRenderer::setNextRenderPattern() {
     renderPattern++;
-    renderPattern = renderPattern % 5; // 5, 6 if wanna use debug mode
+    renderPattern = renderPattern % 5; // 5, 6 if wanna add debug rendering
 }
 
 int FluidRenderer::getRenderPattern() {
