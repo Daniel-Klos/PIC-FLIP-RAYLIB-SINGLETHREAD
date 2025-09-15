@@ -242,13 +242,13 @@ void FluidRenderer::GetParticleDensityColor(int particleIdx, int &r, int &g, int
     int cellX = fluid_attributes.positions[2 * particleIdx] / fluid_attributes.cellSpacing;
     int cellY = fluid_attributes.positions[2 * particleIdx + 1] / fluid_attributes.cellSpacing;
 
-    int density = static_cast<int>(fluid_attributes.cellDensities[cellX * fluid_attributes.n + cellY]) * 25;
+    int densityIdx = static_cast<int>(fluid_attributes.cellDensities[cellX * fluid_attributes.n + cellY]) * 25;
 
-    density = clamp(density, 0, densityGradient.size() - 1);
+    int idx = clamp(densityIdx, 0, densityGradient.size() - 1);
 
-    r = densityGradient[density][0];
-    g = densityGradient[density][1];
-    b = densityGradient[density][2];
+    r = densityGradient[idx][0];
+    g = densityGradient[idx][1];
+    b = densityGradient[idx][2];
 }
 
 
@@ -380,6 +380,7 @@ void FluidRenderer::render_fluid() {
 
     DrawParticles();
 
+    std::copy(begin(fluid_attributes.positions), end(fluid_attributes.positions), begin(fluid_attributes.renderPositions));
     //std::fill(begin(fluid_attributes.debug), end(fluid_attributes.debug), false);
 }
 

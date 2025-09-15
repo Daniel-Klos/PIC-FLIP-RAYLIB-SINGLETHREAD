@@ -8,7 +8,7 @@
 #include <array>
 
 #include "collision_grid.hpp"
-#include "pressure_solver.hpp"
+#include "linear_solver.hpp"
 #include "density_projection.hpp"
 #include "transfer_grid.hpp"
 #include "fluid_rendering.hpp"
@@ -39,7 +39,7 @@ public:
     std::vector<uint32_t> collisions;
 
     FluidRenderer &fluid_renderer;
-    PressureSolver pressure_solver;
+    LinearSolver pressure_solver;
     IDPSolver density_solver;
     TransferGrid transfer_grid;
 
@@ -50,6 +50,7 @@ public:
                                                       pressure_solver(fas),
                                                       density_solver(fas),
                                                       transfer_grid(fas)
+
     {
         
         this->moveDist = 2 * fluid_attributes.radius;
@@ -67,17 +68,46 @@ public:
         objectRenderRadius = objectSimRadius / fluid_attributes.frame_context.zoom_amount;
     }
 
-    void createRandomPositions() {
-        std::uniform_int_distribution<int> randWidth(fluid_attributes.radius, fluid_attributes.frame_context.WIDTH - fluid_attributes.radius);
-        std::uniform_int_distribution<int> randHeight(fluid_attributes.radius, fluid_attributes.frame_context.HEIGHT - fluid_attributes.radius);
-
-        std::random_device rd;
-        std::mt19937 mt(rd());
-
-        for (int i = 0; i < fluid_attributes.num_particles; ++i) {
-            fluid_attributes.positions[i * 2] = randWidth(mt);
-            fluid_attributes.positions[i * 2 + 1] = randHeight(mt);
+    void ApplyBodyForces() {
+        if (dragObjectActive) {                                                          // dragging
+            includeDragObject();
+        } if (forceObjectActive && fluid_attributes.frame_context.leftMouseDown) {  // force pull
+            includeForceObject(-250);
+        } if (forceObjectActive && fluid_attributes.frame_context.rightMouseDown) { // force push
+            includeForceObject(1000); // pushing, 1000
         }
+        if (fluid_renderer.getRenderPattern() == 3 && fluid_attributes.fireActive) {     // applying buoyant force to high temperature partiles
+            makeFire();
+        }
+        if (fluid_renderer.getRenderPattern() == 3) {                              // ground->particle thermal conducting. I just lump it in here but it's not an actual force
+            heatGround();                                                          // note that particle->particle thermal conducting is handled in solveCollisions()
+        }
+        if (fluid_attributes.vorticityStrength != 0) {           // vorticity confinement
+            applyVorticityConfinementRedBlack();
+        }
+    }
+
+    void UpdateEnvironment() {
+        Advect();
+
+        SolveCollisions();
+
+        fluid_attributes.CollideSurfaces();
+
+        MarkAirAndFluidCells();
+
+        density_solver.ComputeGridDensity();
+
+        //density_solver.ProjectDensity();
+        //MarkAirAndFluidCells();
+
+        transfer_grid.TransferToGrid();
+
+        ApplyBodyForces();
+        
+        pressure_solver.SolvePressure();
+
+        transfer_grid.TransferToParticles();
     }
 
     void Advect() {
@@ -252,23 +282,17 @@ public:
         }
     }
 
-    void solveCollisionThreaded(uint32_t start, uint32_t end)
-    {
-        for (uint32_t idx = start; idx < end; ++idx) {
-            processCell(collisionGrid.data[idx], idx);
-        }
-    }
-
-    void solveCollisions()
+    void SolveCollisions()
     {
         if (fluid_attributes.fireActive) {
             std::fill(begin(collisions), end(collisions), 0);
         }
+
         FillCollisionGrid();
 
-        const uint32_t slice_size = collisionGrid.width * collisionGrid.height;
-        
-        solveCollisionThreaded(0, slice_size);
+        for (int32_t idx = 0; idx < collisionGrid.width * collisionGrid.height; ++idx) {
+            processCell(collisionGrid.data[idx], idx);
+        }
     }
 
     void calcVorticityConfinement(bool red, int32_t startColumn, int32_t endColumn) {
@@ -480,9 +504,10 @@ public:
     }
 
     void remove() {
-        const int32_t numCovered = std::ceil(objectSimRadius / scalingFactor);
-        const int32_t mouseColumn = std::floor(fluid_attributes.frame_context.world_mouse_pos.x / scalingFactor);
-        const int32_t mouseRow = std::floor(fluid_attributes.frame_context.world_mouse_pos.y / scalingFactor);
+        float spacing = fluid_attributes.cellSpacing;
+        const int32_t numCovered = std::ceil(objectSimRadius / spacing);
+        const int32_t mouseColumn = std::floor(fluid_attributes.frame_context.world_mouse_pos.x / spacing);
+        const int32_t mouseRow = std::floor(fluid_attributes.frame_context.world_mouse_pos.y / spacing);
         const size_t len = fluid_attributes.num_particles;
         const size_t double_len = 2 * len;
         const size_t triple_len = 3 * len;
@@ -491,10 +516,10 @@ public:
         
         for (int32_t i = -numCovered; i < numCovered + 1; ++i) {
             for (int32_t j = -numCovered; j < numCovered + 1; ++j) {
-                if (mouseRow + j <= 1 || mouseRow + j >= scaledHEIGHT - 1 || mouseColumn + i <= 1 || mouseColumn + i >= scaledWIDTH - 1)
+                if (mouseRow + j <= 1 || mouseRow + j >= fluid_attributes.numY - 1 || mouseColumn + i <= 1 || mouseColumn + i >= fluid_attributes.numX - 1)
                     continue;
     
-                const auto cell = collisionGrid.data[mouseRow + j + collisionGrid.height * (mouseColumn + i)];
+                const auto &cell = fluid_attributes.cellOccupants.data[mouseRow + j + fluid_attributes.cellOccupants.height * (mouseColumn + i)];
     
                 for (uint32_t id{0}; id < cell.objects_count; ++id) {
                     const uint32_t particleIndex = cell.objects[id];

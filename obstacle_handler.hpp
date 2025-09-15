@@ -186,24 +186,18 @@ struct ObstacleHandler {
             float dist = sqrt(dx * dx + dy * dy);
             
             float nX, nY;
-            if (dist > 0) {
-                nX = dx / dist;
-                nY = dy / dist;
-            }
-            else {
-                nX = 0;
-                nY = 0;
-            }
+            
+            nX = dx / dist;
+            nY = dy / dist;
 
-            float velocityNormal = vx * -nX + vy * -nY;
+            float velocityNormal = -(vx * nX + vy * nY);
             if (velocityNormal < 0) {
-                vx -= velocityNormal * -nX;
-                vy -= velocityNormal * -nY;
+                vx += velocityNormal * nX;
+                vy += velocityNormal * nY;
             }
 
             fas.positions[pIdx]     = surface.x;
             fas.positions[pIdx + 1] = surface.y;
-
         }
     }
 

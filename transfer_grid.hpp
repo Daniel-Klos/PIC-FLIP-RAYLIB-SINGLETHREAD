@@ -48,9 +48,9 @@ public:
 
         P2G();
 
-        momentumToVelocityMulti();
+        momentumToVelocity();
 
-        enforceNoSlipMulti();
+        NeumannBC();
 
         // store prev grid for FLIP
         std::copy(std::begin(fluid_attributes.u), std::end(fluid_attributes.u), std::begin(fluid_attributes.prevU));
@@ -67,34 +67,6 @@ public:
     }
 
 private:
-
-    float Weight(float px, float py, float gx, float gy) {
-        gx *= fluid_attributes.cellSpacing;
-        gy *= fluid_attributes.cellSpacing;
-
-        float dx = 1.f - std::abs((px - gx)) * invSpacing;
-        float dy = 1.f - std::abs((py - gy)) * invSpacing;
-
-        return dx * dy;
-    }
-
-    void WeightGradientFD(float px, float py, float gx, float gy, float &gradX, float &gradY) {
-        float eps = fluid_attributes.cellSpacing * 0.001f;
-
-        gradX = (Weight(px, py + eps, gx, gy) - Weight(px, py - eps, gx, gy)) / (2 * eps);
-        gradY = (Weight(px + eps, py, gx, gy) - Weight(px - eps, py, gx, gy)) / (2 * eps);
-    }
-
-    void WeightGradient(float px, float py, float gx, float gy, float &gradx, float &grady) {
-        gx *= fluid_attributes.cellSpacing;
-        gy *= fluid_attributes.cellSpacing;
-
-        float dx = (px - gx) * invSpacing;
-        float dy = (py - gy) * invSpacing;
-
-        gradx = -sign(dx) * (1.f - abs(dy)) * invSpacing;
-        grady = -sign(dy) * (1.f - abs(dx)) * invSpacing;
-    }
 
     void SetUpTransferGrid() {
         std::copy(std::begin(fluid_attributes.u), std::end(fluid_attributes.u), std::begin(fluid_attributes.prevU));
@@ -133,10 +105,10 @@ private:
                 int32_t bottomLeftCell  = x0 * n + y1;
                 int32_t bottomRightCell = x1 * n + y1;
 
-                float topLeftWeight     = Weight(px, py, x0, y0);
-                float topRightWeight    = Weight(px, py, x1, y0);
-                float bottomLeftWeight  = Weight(px, py, x0, y1);
-                float bottomRightWeight = Weight(px, py, x1, y1);
+                float topLeftWeight     = fluid_attributes.Weight(px, py, x0, y0);
+                float topRightWeight    = fluid_attributes.Weight(px, py, x1, y0);
+                float bottomLeftWeight  = fluid_attributes.Weight(px, py, x0, y1);
+                float bottomRightWeight = fluid_attributes.Weight(px, py, x1, y1);
 
                 float dxLeft   = -(px - x0 * fluid_attributes.cellSpacing) * invSpacing;
                 float dyTop    = -(py - y0 * fluid_attributes.cellSpacing) * invSpacing;
@@ -184,8 +156,8 @@ private:
         }
     }
 
-    void momentumToVelocity(int start, int end) {
-        for (int i = start; i < end; ++i) {
+    void momentumToVelocity() {
+        for (int i = 0; i < fluid_attributes.gridSize; ++i) {
             float prevNode = fluid_attributes.sumUGridWeights[i];
             if (prevNode > 0.f) {
                 fluid_attributes.u[i] /= prevNode;
@@ -197,12 +169,8 @@ private:
         }
     }
 
-    void momentumToVelocityMulti() {
-        momentumToVelocity(0, fluid_attributes.gridSize);
-    }
-
-    void enforceNoSlip(int start, int end) {
-        for (int i = start; i < end; ++i) {
+    void NeumannBC() {
+        for (int i = 0; i < fluid_attributes.numX - 1; ++i) {
             for (int j = 0; j < fluid_attributes.numY; ++j) {
                 int idx = i * n + j;
                 bool solid = fluid_attributes.cellType[idx] == SOLID_CELL;
@@ -214,10 +182,6 @@ private:
                 }
             }
         }
-    }
-
-    void enforceNoSlipMulti() {
-        enforceNoSlip(0, fluid_attributes.numX - 1);
     }
 
     void G2P() {
@@ -248,10 +212,10 @@ private:
                 int32_t bottomLeftCell  = x0 * n + y1;
                 int32_t bottomRightCell = x1 * n + y1;
 
-                float topLeftWeight     = Weight(px, py, x0, y0);
-                float topRightWeight    = Weight(px, py, x1, y0);
-                float bottomLeftWeight  = Weight(px, py, x0, y1);
-                float bottomRightWeight = Weight(px, py, x1, y1);
+                float topLeftWeight     = fluid_attributes.Weight(px, py, x0, y0);
+                float topRightWeight    = fluid_attributes.Weight(px, py, x1, y0);
+                float bottomLeftWeight  = fluid_attributes.Weight(px, py, x0, y1);
+                float bottomRightWeight = fluid_attributes.Weight(px, py, x1, y1);
 
                 float pv = fluid_attributes.velocities[i + component];
 
@@ -327,10 +291,10 @@ private:
                 float topLeftWeightDerivativeX, topRightWeightDerivativeX, bottomLeftWeightDerivativeX, bottomRightWeightDerivativeX;
                 float topLeftWeightDerivativeY, topRightWeightDerivativeY, bottomLeftWeightDerivativeY, bottomRightWeightDerivativeY;
 
-                WeightGradient(px, py, x0, y0, topLeftWeightDerivativeX, topLeftWeightDerivativeY);
-                WeightGradient(px, py, x1, y0, topRightWeightDerivativeX, topRightWeightDerivativeY);
-                WeightGradient(px, py, x0, y1, bottomLeftWeightDerivativeX, bottomLeftWeightDerivativeY);
-                WeightGradient(px, py, x1, y1, bottomRightWeightDerivativeX, bottomRightWeightDerivativeY);
+                fluid_attributes.WeightGradient(px, py, x0, y0, topLeftWeightDerivativeX, topLeftWeightDerivativeY);
+                fluid_attributes.WeightGradient(px, py, x1, y0, topRightWeightDerivativeX, topRightWeightDerivativeY);
+                fluid_attributes.WeightGradient(px, py, x0, y1, bottomLeftWeightDerivativeX, bottomLeftWeightDerivativeY);
+                fluid_attributes.WeightGradient(px, py, x1, y1, bottomRightWeightDerivativeX, bottomRightWeightDerivativeY);
 
                 C[i] = (topLeftWeightDerivativeX    * gridVelX_topLeft +
                        topRightWeightDerivativeX    * gridVelX_topRight +

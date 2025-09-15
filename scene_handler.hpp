@@ -125,8 +125,7 @@ struct SceneHandler {
         HandleUserInteraction();
             
         if (!fluid_attributes.stop || fluid_attributes.step) {
-            std::copy(begin(fluid_attributes.positions), end(fluid_attributes.positions), begin(fluid_attributes.renderPositions));
-            update_environment();
+            fluid_handler.UpdateEnvironment();
             fluid_attributes.step = false;
         }
 
@@ -151,27 +150,6 @@ struct SceneHandler {
         
     }
 
-    // move all this into fluid_handler. move obstacle_handler into fluid_handler too
-    void update_environment() {
-
-        fluid_handler.Advect();
-
-        ModifyParticlePositions();
-
-        fluid_handler.MarkAirAndFluidCells();
-
-        fluid_handler.density_solver.ProjectDensity();
-
-        fluid_handler.transfer_grid.TransferToGrid();
-
-        ApplyBodyForces();
-        
-        fluid_handler.pressure_solver.ProjectPressure();
-
-        fluid_handler.transfer_grid.TransferToParticles();
-    }
-
-
     void HandleUserInteraction() {
         if (obstacle_handler.solidDrawing && fluid_attributes.frame_context.leftMouseDown) {
             obstacle_handler.drawSolids();
@@ -182,37 +160,10 @@ struct SceneHandler {
         if (fluid_handler.generatorActive && fluid_attributes.frame_context.leftMouseDown) {
             fluid_handler.generate();
         } else if (fluid_handler.generatorActive && fluid_attributes.frame_context.rightMouseDown) {
+            fluid_attributes.FillCellOccupants();
             fluid_handler.remove();
         }
     }
-
-
-    void ModifyParticlePositions() {
-        //fluid_handler.solveCollisions();
-
-        obstacle_handler.CollideSurfaces();
-    }
-
-
-    void ApplyBodyForces() {
-        if (fluid_handler.dragObjectActive) {                                                          // dragging
-            fluid_handler.includeDragObject();
-        } if (fluid_handler.forceObjectActive && fluid_attributes.frame_context.leftMouseDown) {  // force pull
-            fluid_handler.includeForceObject(-250);
-        } if (fluid_handler.forceObjectActive && fluid_attributes.frame_context.rightMouseDown) { // force push
-            fluid_handler.includeForceObject(1000); // pushing, 1000
-        }
-        if (fluid_handler.fluid_renderer.getRenderPattern() == 3 && fluid_attributes.fireActive) {     // applying buoyant force to high temperature partiles
-            fluid_handler.makeFire();
-        }
-        if (fluid_handler.fluid_renderer.getRenderPattern() == 3) {                              // ground->particle thermal conducting. I just lump it in here but it's not an actual force
-            fluid_handler.heatGround();                                                          // note that particle->particle thermal conducting is handled in fluid_handler.solveCollisions()
-        }
-        if (fluid_attributes.vorticityStrength != 0) {           // vorticity confinement
-            fluid_handler.applyVorticityConfinementRedBlack();
-        }
-    }
-
 
     void handle_zoom() {
         if (fluid_attributes.frame_context.leftMouseDown && scene_renderer.getZoomObjectActive()) {
@@ -237,6 +188,12 @@ struct SceneHandler {
 
 
     void track_keydown_events() {
+        if (IsKeyDown(KEY_O)) {
+            fluid_handler.density_solver.AddToRestDensity(-0.1f);
+        }
+        if (IsKeyDown(KEY_P)) {
+            fluid_handler.density_solver.AddToRestDensity(0.1f);
+        }
         if (IsKeyDown(KEY_B)) {
             if (lteEpsPlus(fluid_attributes.getFlipRatio(), 0.99f)) {
                 bool smallIncrement = gteEpsMinus(fluid_attributes.getFlipRatio(), 0.9f);
@@ -449,6 +406,9 @@ struct SceneHandler {
             DrawTextNearRightWall(num_particles_str, showControlsHEIGHT * 12);
 
             DrawTextNearRightWall(hideControlsStr, hideControlsY);
+
+            std::string rest_density_str = "Rest Density:     " + std::to_string(fluid_handler.density_solver.getRestDensity());
+            DrawTextNearRightWall(rest_density_str, showControlsHEIGHT * 15);
 
             /*DrawCircle(hideControlsX, hideControlsY, 10, RED);
             DrawCircle(hideControlsX + hideControlsWIDTH, hideControlsY + hideControlsHEIGHT, 10, RED);*/

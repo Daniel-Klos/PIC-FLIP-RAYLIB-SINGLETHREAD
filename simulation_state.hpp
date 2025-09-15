@@ -23,7 +23,6 @@ struct FluidState {
     std::vector<float> prevU;
     std::vector<float> prevV;
     std::vector<float> cellDensities;
-    std::vector<float> cellVolumes;
     std::vector<int> fluid_cells;
     std::vector<Vector2i> obstaclePositions;
     std::vector<float> phi;
@@ -39,11 +38,13 @@ struct FluidState {
     int gridSize;
     int num_fluid_cells;
     int age_constant = 5;
+    float rightWallPos;
+    float floorPos;
 
-    float particleRestDensity;
+    float particleRestDensity = 0.f; // INITIALIZE TO 0.f
 
     float vorticityStrength;
-    float flipRatio; // move this to TransferGrid struct
+    float flipRatio;
 
     float gravityX;
     float gravityY;
@@ -79,6 +80,9 @@ struct FluidState {
         n = numY;
         gridSize = numX * numY;
 
+        rightWallPos = (numX - 1) * cellSpacing;
+        floorPos     = (numY - 1) * cellSpacing;
+
         particleAges.resize(num_particles);
         std::fill(begin(particleAges), end(particleAges), 0);
 
@@ -96,7 +100,6 @@ struct FluidState {
         prevU.resize(gridSize);
         prevV.resize(gridSize);
         cellDensities.resize(gridSize);
-        cellVolumes.resize(gridSize);
         fluid_cells.resize(gridSize);
 
         //debug.resize(num_particles);
@@ -130,6 +133,168 @@ struct FluidState {
                 py += this->radius * separation;
                 offset = !offset;
             }
+        }
+    }
+
+    float Weight(float px, float py, float gx, float gy) {
+        gx *= cellSpacing;
+        gy *= cellSpacing;
+
+        float dx = 1.f - std::abs((px - gx)) * invSpacing;
+        float dy = 1.f - std::abs((py - gy)) * invSpacing;
+
+        return dx * dy;
+    }
+
+    void WeightGradientFD(float px, float py, float gx, float gy, float &gradX, float &gradY) {
+        float eps = cellSpacing * 0.001f;
+
+        gradX = (Weight(px, py + eps, gx, gy) - Weight(px, py - eps, gx, gy)) / (2 * eps);
+        gradY = (Weight(px + eps, py, gx, gy) - Weight(px - eps, py, gx, gy)) / (2 * eps);
+    }
+
+    void WeightGradient(float px, float py, float gx, float gy, float &gradx, float &grady) {
+        gx *= cellSpacing;
+        gy *= cellSpacing;
+
+        float dx = (px - gx) * invSpacing;
+        float dy = (py - gy) * invSpacing;
+
+        gradx = -sign(dx) * (1.f - abs(dy)) * invSpacing;
+        grady = -sign(dy) * (1.f - abs(dx)) * invSpacing;
+    }
+
+    float samplePhi(Vector2 pos) {
+        int x = pos.x;
+        int y = pos.y;
+
+        float gx = x / cellSpacing - 0.5f;
+        float gy = y / cellSpacing - 0.5f;
+
+        int i0 = clamp(int(std::floor(gx)), 0, numX - 1);
+        int j0 = clamp(int(std::floor(gy)), 0, numY - 1);
+        int i1 = std::min(i0 + 1, numX - 1);
+        int j1 = std::min(j0 + 1, numY - 1);
+        
+        float fx = gx - i0;
+        float fy = gy - j0;
+
+        int topLeft     = i0 * numY + j0;
+        int topRight    = i1 * numY + j0;
+        int bottomLeft  = i0 * numY + j1;
+        int bottomRight = i1 * numY + j1;
+
+        float topLeftVal     = phi[topLeft];
+        float topRightVal    = phi[topRight];
+        float bottomLeftVal  = phi[bottomLeft];
+        float bottomRightVal = phi[bottomRight];
+
+        float v0 = (1 - fx) * topLeftVal    + fx * topRightVal;
+        float v1 = (1 - fx) * bottomLeftVal + fx * bottomRightVal;
+        return (1 - fy) * v0 + fy * v1;
+    }
+    
+    Vector2 sampleGradient(Vector2 pos) {
+        float eps = cellSpacing * 0.25f;
+        
+        float ddx = (samplePhi(pos + Vector2{eps, 0}) -
+                     samplePhi(pos - Vector2{eps, 0})) / (2 * eps);
+
+        float ddy = (samplePhi(pos + Vector2{0, eps}) -
+                     samplePhi(pos - Vector2{0, eps})) / (2 * eps);
+
+        Vector2 g{ddx, ddy};
+        float len = std::sqrt(g.x * g.x + g.y * g.y);
+        return (len > 1e-6f) ? g / len : Vector2{0,0};
+    }
+
+    Vector2 ClosestSurfacePoint(Vector2 pos) {
+        Vector2 p = {clamp(pos.x, cellSpacing, rightWallPos), clamp(pos.y, cellSpacing, floorPos)};
+        auto phi_p = samplePhi(p);
+        if (phi_p == 0) {
+            return pos;
+        }
+        auto d = sampleGradient(p);
+
+        float eps = 1e-1;
+
+        for (int i = 0; i < 2; ++i) {
+            float alpha = 1.f;
+
+            for (int i = 0; i < 2; ++i) {
+                auto q = p - d * alpha * phi_p;
+                auto phi_q = samplePhi(q);
+                if (abs(phi_q) < abs(phi_p)) {
+                    p = q;
+                    phi_p = phi_q;
+                    d = sampleGradient(q);
+                    if (abs(phi_p) < eps) {
+                        return p;
+                    }
+                }
+                else {
+                    alpha = 0.7 * alpha;
+                }
+            }
+        }
+
+        return p;
+    }
+
+    void CollideSurfaces() {
+        for (int i = 0; i < num_particles; ++i) {
+            int pIdx = 2 * i;
+            float vx = velocities[pIdx];
+            float vy = velocities[pIdx + 1];
+
+            Vector2 pos = {positions[pIdx], positions[pIdx + 1]};
+
+            Vector2 surface = ClosestSurfacePoint(pos);
+
+            if (surface == pos) continue;
+
+            float dx = surface.x - pos.x;
+            float dy = surface.y - pos.y;
+
+            float dist = sqrt(dx * dx + dy * dy);
+            
+            float nX, nY;
+            
+            nX = dx / dist;
+            nY = dy / dist;
+
+            float velocityNormal = -(vx * nX + vy * nY);
+            if (velocityNormal < 0) {
+                vx += velocityNormal * nX;
+                vy += velocityNormal * nY;
+            }
+
+            positions[pIdx]     = surface.x;
+            positions[pIdx + 1] = surface.y;
+        }
+    }
+
+    void FillCellOccupants() {
+        cellOccupants.clear();
+
+        const float minX = cellSpacing;
+        const float maxX = frame_context.WIDTH - cellSpacing;
+        const float minY = cellSpacing;
+        const float maxY = frame_context.HEIGHT - cellSpacing;
+
+        uint32_t i{0};
+
+        for (int32_t index = 0; index < num_particles; ++index) {
+            float x = positions[2 * index];
+            float y = positions[2 * index + 1];
+            if (x > minX && x < maxX && y > minY && y < maxY) {
+                
+                int32_t cellOccupantsX = x / cellSpacing;
+                int32_t cellOccupantsY = y / cellSpacing;
+                cellOccupants.addAtom(cellOccupantsX, cellOccupantsY, i);
+
+            }
+            ++i;
         }
     }
 
