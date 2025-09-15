@@ -125,6 +125,7 @@ struct SceneHandler {
         HandleUserInteraction();
             
         if (!fluid_attributes.stop || fluid_attributes.step) {
+            std::copy(begin(fluid_attributes.positions), end(fluid_attributes.positions), begin(fluid_attributes.renderPositions));
             fluid_handler.UpdateEnvironment();
             fluid_attributes.step = false;
         }
@@ -188,12 +189,6 @@ struct SceneHandler {
 
 
     void track_keydown_events() {
-        if (IsKeyDown(KEY_O)) {
-            fluid_handler.density_solver.AddToRestDensity(-0.1f);
-        }
-        if (IsKeyDown(KEY_P)) {
-            fluid_handler.density_solver.AddToRestDensity(0.1f);
-        }
         if (IsKeyDown(KEY_B)) {
             if (lteEpsPlus(fluid_attributes.getFlipRatio(), 0.99f)) {
                 bool smallIncrement = gteEpsMinus(fluid_attributes.getFlipRatio(), 0.9f);
@@ -307,6 +302,12 @@ struct SceneHandler {
         if (IsKeyPressed(KEY_U)) {
             fluid_attributes.setStep(true);
         }
+        if (IsKeyPressed(KEY_O)) {
+            fluid_handler.density_solver.AddToRestDensity(-0.1);
+        }
+        if (IsKeyPressed(KEY_P)) {
+            fluid_handler.density_solver.AddToRestDensity(0.1);
+        }
     }
 
     void track_mouse_events() {
@@ -407,8 +408,8 @@ struct SceneHandler {
 
             DrawTextNearRightWall(hideControlsStr, hideControlsY);
 
-            std::string rest_density_str = "Rest Density:     " + std::to_string(fluid_handler.density_solver.getRestDensity());
-            DrawTextNearRightWall(rest_density_str, showControlsHEIGHT * 15);
+            std::string restDensityStr = "Rest Density:     " + std::to_string(fluid_handler.density_solver.getRestDensity());
+            DrawTextNearRightWall(restDensityStr, showControlsHEIGHT * 15.5);
 
             /*DrawCircle(hideControlsX, hideControlsY, 10, RED);
             DrawCircle(hideControlsX + hideControlsWIDTH, hideControlsY + hideControlsHEIGHT, 10, RED);*/

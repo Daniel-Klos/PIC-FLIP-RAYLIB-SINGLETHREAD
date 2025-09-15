@@ -48,8 +48,8 @@ struct PressureSolver {
     // What I'm using currently
     // --------------------------------------------------------------------------------------------------------------------------------------------
 
-    void passRedBlackSOR(int start, int stop, bool red) {
-        for (int i = start; i < stop; ++i) {
+    void passRedBlackSOR(bool red) {
+        for (int i = 1; i < fluid_attributes.numX - 1; ++i) {
             for (int j = (i + red) % 2; j < fluid_attributes.numY - 1; j += 2) {
                 int idx = i * n + j;
                 if (fluid_attributes.cellType[idx] != FLUID) continue;
@@ -68,7 +68,7 @@ struct PressureSolver {
                     float compression = fluid_attributes.cellDensities[idx] - fluid_attributes.particleRestDensity;
                     if (compression > 0.f) {
                         divergence -= k * compression;
-                    }
+                   }
                 }*/
 
                 float p = divergence / divideBy;
@@ -82,10 +82,10 @@ struct PressureSolver {
         }
     }
 
-    void ProjectPressure() {
+    void SolvePressure() {
         for (int iter = 0; iter < numPressureIters; ++iter) {
-            passRedBlackSOR(1, fluid_attributes.numX - 1, 0);
-            passRedBlackSOR(1, fluid_attributes.numX - 1, 1);
+            passRedBlackSOR(0);
+            passRedBlackSOR(1);
         }
     }
     // --------------------------------------------------------------------------------------------------------------------------------------------

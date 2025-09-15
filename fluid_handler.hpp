@@ -8,7 +8,7 @@
 #include <array>
 
 #include "collision_grid.hpp"
-#include "linear_solver.hpp"
+#include "pressure_solver.hpp"
 #include "density_projection.hpp"
 #include "transfer_grid.hpp"
 #include "fluid_rendering.hpp"
@@ -39,7 +39,7 @@ public:
     std::vector<uint32_t> collisions;
 
     FluidRenderer &fluid_renderer;
-    LinearSolver pressure_solver;
+    PressureSolver pressure_solver;
     IDPSolver density_solver;
     TransferGrid transfer_grid;
 
@@ -50,7 +50,6 @@ public:
                                                       pressure_solver(fas),
                                                       density_solver(fas),
                                                       transfer_grid(fas)
-
     {
         
         this->moveDist = 2 * fluid_attributes.radius;
@@ -66,6 +65,19 @@ public:
         collisionGrid = CollisionGrid(scaledWIDTH, scaledHEIGHT);
 
         objectRenderRadius = objectSimRadius / fluid_attributes.frame_context.zoom_amount;
+    }
+
+    void createRandomPositions() {
+        std::uniform_int_distribution<int> randWidth(fluid_attributes.radius, fluid_attributes.frame_context.WIDTH - fluid_attributes.radius);
+        std::uniform_int_distribution<int> randHeight(fluid_attributes.radius, fluid_attributes.frame_context.HEIGHT - fluid_attributes.radius);
+
+        std::random_device rd;
+        std::mt19937 mt(rd());
+
+        for (int i = 0; i < fluid_attributes.num_particles; ++i) {
+            fluid_attributes.positions[i * 2] = randWidth(mt);
+            fluid_attributes.positions[i * 2 + 1] = randHeight(mt);
+        }
     }
 
     void ApplyBodyForces() {
@@ -94,12 +106,12 @@ public:
 
         fluid_attributes.CollideSurfaces();
 
-        MarkAirAndFluidCells();
-
-        density_solver.ComputeGridDensity();
-
+        //MarkAirAndFluidCells();
         //density_solver.ProjectDensity();
         //MarkAirAndFluidCells();
+
+        density_solver.ComputeGridDensityOnly();
+        MarkAirAndFluidCells();
 
         transfer_grid.TransferToGrid();
 
@@ -287,7 +299,6 @@ public:
         if (fluid_attributes.fireActive) {
             std::fill(begin(collisions), end(collisions), 0);
         }
-
         FillCollisionGrid();
 
         for (int32_t idx = 0; idx < collisionGrid.width * collisionGrid.height; ++idx) {

@@ -301,10 +301,10 @@ struct FluidState {
     void GetStaggeredGridPositions(float px, float py, int& x0, int& x1, int& y0, int& y1, int component) {
 
         // if you ever implement extrapolation, see if this bug goes away
-        x0 = std::max(1, std::min(static_cast<int>(std::floor(px * invSpacing)), numX - 2));
+        x0 = clamp(static_cast<int>(std::floor(px * invSpacing)), 1, numX - 2);
         x1 = std::min(x0 + 1, numX - 2); // <- see if you can make this 1
     
-        y0 = std::max(1, std::min(static_cast<int>(std::floor(py * invSpacing)), numY - 2));
+        y0 = clamp(static_cast<int>(std::floor(py * invSpacing)), 1, numY - 2);
         y1 = std::min(y0 + 1, numY - 1);
 
         // this stops the fluid touching the left wall from going down
