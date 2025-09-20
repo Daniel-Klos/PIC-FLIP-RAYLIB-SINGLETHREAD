@@ -32,8 +32,8 @@ public:
     float objectSimRadius = 250;
     float objectRenderRadius = objectSimRadius;
 
-    bool forceObjectActive = true;
-    bool dragObjectActive = false;
+    bool dragObjectActive = true;
+    bool forceObjectActive = false;
     bool generatorActive = false;
 
     std::vector<uint32_t> collisions;
@@ -102,15 +102,13 @@ public:
     void UpdateEnvironment() {
         Advect();
 
-        SolveCollisions();
-
-        fluid_attributes.CollideSurfaces();
-
-        //MarkAirAndFluidCells();
-        //density_solver.ProjectDensity();
+        //SolveCollisions();
+        //fluid_attributes.CollideSurfaces();
+        //density_solver.ComputeGridDensityOnly();
         //MarkAirAndFluidCells();
 
-        density_solver.ComputeGridDensityOnly();
+        MarkAirAndFluidCells();
+        density_solver.ProjectDensity();
         MarkAirAndFluidCells();
 
         transfer_grid.TransferToGrid();
@@ -383,13 +381,14 @@ public:
     void includeDragObject() {
         // Bug when you hold force object attract then switch to drag object while holding mouse down
         const float extend = (20 * fluid_attributes.cellSpacing) / fluid_attributes.frame_context.zoom_amount;
+        const float invDt = 1.f / fluid_attributes.frame_context.dt;
         if (fluid_attributes.frame_context.leftMouseDown || fluid_attributes.frame_context.rightMouseDown) {
             float objectX = fluid_attributes.frame_context.world_mouse_pos.x;
             float objectY = fluid_attributes.frame_context.world_mouse_pos.y;
             float objectPrevX = fluid_attributes.frame_context.prev_world_mouse_pos.x;
             float objectPrevY = fluid_attributes.frame_context.prev_world_mouse_pos.y;
-            float vx = (objectX - objectPrevX) * fluid_attributes.frame_context.maxFps * !fluid_attributes.frame_context.justPressed;
-            float vy = (objectY - objectPrevY) * fluid_attributes.frame_context.maxFps * !fluid_attributes.frame_context.justPressed;
+            float vx = (objectX - objectPrevX) * invDt * !fluid_attributes.frame_context.justPressed;
+            float vy = (objectY - objectPrevY) * invDt * !fluid_attributes.frame_context.justPressed;
             int objectCellX = objectX / fluid_attributes.cellSpacing;
             int objectCellY = objectY / fluid_attributes.cellSpacing;
             int objectCellRadius = std::ceil(objectSimRadius / fluid_attributes.cellSpacing);
@@ -402,7 +401,6 @@ public:
                     float dy = (j + 0.5) * fluid_attributes.cellSpacing - objectY;
 
                     if (dx * dx + dy * dy < objectSimRadius * objectSimRadius + extend) {
-                        
                         if (fluid_attributes.cellType[cellNr - fluid_attributes.n] != fluid_attributes.SOLID) {
                             fluid_attributes.u[cellNr] = vx;
                         }
@@ -527,7 +525,7 @@ public:
         
         for (int32_t i = -numCovered; i < numCovered + 1; ++i) {
             for (int32_t j = -numCovered; j < numCovered + 1; ++j) {
-                if (mouseRow + j <= 1 || mouseRow + j >= fluid_attributes.numY - 1 || mouseColumn + i <= 1 || mouseColumn + i >= fluid_attributes.numX - 1)
+                if (mouseRow + j < 1 || mouseRow + j > fluid_attributes.numY - 1 || mouseColumn + i < 1 || mouseColumn + i > fluid_attributes.numX - 1)
                     continue;
     
                 const auto &cell = fluid_attributes.cellOccupants.data[mouseRow + j + fluid_attributes.cellOccupants.height * (mouseColumn + i)];

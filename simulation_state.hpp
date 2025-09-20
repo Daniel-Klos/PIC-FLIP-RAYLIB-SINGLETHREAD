@@ -23,6 +23,7 @@ struct FluidState {
     std::vector<float> prevU;
     std::vector<float> prevV;
     std::vector<float> cellDensities;
+    //std::vector<float> cellMasses
     std::vector<int> fluid_cells;
     std::vector<Vector2i> obstaclePositions;
     std::vector<float> phi;
@@ -149,8 +150,12 @@ struct FluidState {
     void WeightGradientFD(float px, float py, float gx, float gy, float &gradX, float &gradY) {
         float eps = cellSpacing * 0.001f;
 
-        gradX = (Weight(px, py + eps, gx, gy) - Weight(px, py - eps, gx, gy)) / (2 * eps);
-        gradY = (Weight(px + eps, py, gx, gy) - Weight(px - eps, py, gx, gy)) / (2 * eps);
+        gradX = (Weight(px + eps, py, gx, gy) - Weight(px - eps, py, gx, gy)) / (2 * eps);
+        gradY = (Weight(px, py + eps, gx, gy) - Weight(px, py - eps, gx, gy)) / (2 * eps);
+    }
+
+    void WeightGradientTest(float px, float py, float gx, float gy, float &gradX, float &gradY) {
+        
     }
 
     void WeightGradient(float px, float py, float gx, float gy, float &gradx, float &grady) {

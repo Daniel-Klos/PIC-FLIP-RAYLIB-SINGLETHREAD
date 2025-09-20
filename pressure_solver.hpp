@@ -64,12 +64,12 @@ struct PressureSolver {
                 if (divideBy == 0.f) continue;
 
                 float divergence = fluid_attributes.u[idx + n] - fluid_attributes.u[idx] + fluid_attributes.v[idx + 1] - fluid_attributes.v[idx];
-                /*if (fluid_attributes.particleRestDensity > 0.f) {
+                if (fluid_attributes.particleRestDensity > 0.f) {
                     float compression = fluid_attributes.cellDensities[idx] - fluid_attributes.particleRestDensity;
                     if (compression > 0.f) {
                         divergence -= k * compression;
                    }
-                }*/
+                }
 
                 float p = divergence / divideBy;
                 p *= overRelaxation;
@@ -111,12 +111,6 @@ struct PressureSolver {
     // conjugate gradient code
     // --------------------------------------------------------------------------------------------------------------------------------------------
 
-    /*void setUpResidualMulti() {
-        std::fill(begin(residual), end(residual), 0.0);
-
-        fluid_attributes.thread_pool.dispatch(fluid_attributes.numColumns, [this])
-    }*/
-
     /*void setUpResidual() {
         for (int32_t i = 1; i < fluid_attributes.numX - 1; ++i) {
             for (int32_t j = 1; j < fluid_attributes.numY - 1; ++j) {
@@ -138,90 +132,37 @@ struct PressureSolver {
         }
     }
 
-    void ScaledAddMulti(std::vector<double> &a, std::vector<double> &b, double c) {
-        fluid_attributes.thread_pool.dispatch(fluid_attributes.gridSize, [this, &a, &b, c](int start, int end) {
-            ScaledAdd(a, b, c, start, end);
-        });
-    }
-
-    void ScaledAdd(std::vector<double> &a, std::vector<double> &b, double c, int start, int end) {
-        for (int i = start; i < end; ++i) {
+    void ScaledAdd(std::vector<double> &a, std::vector<double> &b, double c) {
+        for (int i = 1; i < fluid_attributes.numX - 1; ++i) {
             if (fluid_attributes.cellType[i] == FLUID) {
                 a[i] += b[i] * c;
             }
         }
     }
 
-    double DotMulti(std::vector<double> &a, std::vector<double> &b) {
-        const int32_t numCellsPerThread = fluid_attributes.gridSize / fluid_attributes.numThreads;
-
-        std::fill(begin(dotProducts), end(dotProducts), 0.0);
-
-        for (int i = 0; i < fluid_attributes.numThreads; ++i) {
-            int start = i * numCellsPerThread;
-            int end = (i == fluid_attributes.numThreads - 1) ? (gridSize) : (start + numCellsPerThread);
-            fluid_attributes.thread_pool.addTask([&, i, start, end]() {
-                this->Dot(a, b, start, end, dotProducts[i]);
-            });
-        }
-
-        fluid_attributes.thread_pool.waitForCompletion();
-
+    double Dot(std::vector<double> &a, std::vector<double> &b) {
         double res = 0.0;
-        for (double el : dotProducts) {
-            res += el;
-        }
-
-        return res;
-    }
-
-    void Dot(std::vector<double> &a, std::vector<double> &b, int start, int end, double &res) {
-        for (int i = start; i < end; ++i) {
+        for (int i = 1; i < fluid_attributes.numX - 1; ++i) {
             if (fluid_attributes.cellType[i] == FLUID) {
                 res += a[i] * b[i];
             }
         }
+        return res;
     }
 
-    void EqualsPlusTimesMulti(std::vector<double> &a, std::vector<double> &b, double c) {
-        fluid_attributes.thread_pool.dispatch(fluid_attributes.gridSize, [this, &a, &b, c](int start, int end) {
-            EqualsPlusTimes(a, b, c, start, end);
-        });
-    }
-
-    void EqualsPlusTimes(std::vector<double> &a, std::vector<double> &b, double c, int start, int end) {
-        for (int i = start; i < end; ++i) {
+    void EqualsPlusTimes(std::vector<double> &a, std::vector<double> &b, double c) {
+        for (int i = 1; i < fluid_attributes.numX - 1; ++i) {
             if (fluid_attributes.cellType[i] == FLUID) {
                 a[i] = b[i] + a[i] * c;
             }
         }
     }
 
-    void applyPressureMulti() {
-        const int32_t numColumnsPerThread = (fluid_attributes.numX - 2) / fluid_attributes.numThreads;
-        const int32_t numMissedColumns = (fluid_attributes.numX - 2) - numColumnsPerThread * fluid_attributes.numThreads;
-
-        for (int i = 0; i < fluid_attributes.numThreads; ++i) {
-            fluid_attributes.thread_pool.addTask([&, i]() {
-                this->applyPressure(1 + i * numColumnsPerThread, 1 + i * numColumnsPerThread + numColumnsPerThread);
-            });
-        }
-
-        this->applyPressure(fluid_attributes.numX - 1 - numMissedColumns, fluid_attributes.numX - 1);
-
-        fluid_attributes.thread_pool.waitForCompletion();
-
-        //const int32_t numColumns = (fluid_attributes.numX - 2);
-        //fluid_attributes.thread_pool.dispatch(numColumns, [this](int start, int end) {
-        //    fluid_attributes.applyPressure(start, end);
-        //});
-    }
-
-    void applyPressure(int start, int end) {
+    void applyPressure() {
         //const float density = 1000.f;
         //const float scale = dt / (density * cellSpacing);
     
-        for (int i = start; i < end; ++i) {
+        for (int i = 1; i < fluid_attributes.numX - 1; ++i) {
             for (int j = 1; j < fluid_attributes.numY - 1; ++j) {
                 int idx = i * n + j;
                 int leftIdx =  idx - n;
@@ -292,14 +233,8 @@ struct PressureSolver {
         }
     }
 
-    void MatVecMulti() {
-        fluid_attributes.thread_pool.dispatch(fluid_attributes.numX - 2, [this](int start, int end) {
-            MatVec(start, end);
-        });
-    }
-
-    void MatVec(int start, int end) {
-        for (int i = start + 1; i < end + 1; ++i) {
+    void MatVec() {
+        for (int i = 1; i < fluid_attributes.numX - 1; ++i) {
             for (int j = 1; j < fluid_attributes.numY - 1; ++j) {
                 int idx = i * n + j;
 

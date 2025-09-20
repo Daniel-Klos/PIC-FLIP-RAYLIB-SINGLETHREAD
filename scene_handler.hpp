@@ -55,7 +55,7 @@ struct SceneHandler {
     {
         fluid_attributes.frame_context.maxFps = maxFps;
         fluid_attributes.frame_context.setDT = 1.f / maxFps;
-        SetTargetFPS(maxFps);
+        //SetTargetFPS(maxFps);
 
         // initialize obstacle positions
         // ----------------------------------------------------------------------------------------------------------------------------
@@ -110,14 +110,13 @@ struct SceneHandler {
 
     void simulate() {
         fluid_attributes.frame_context.trueDT = GetFrameTime();
-        fluid_attributes.frame_context.trueDT = std::max(fluid_attributes.frame_context.trueDT, fluid_attributes.frame_context.setDT);
 
         Vector2 mouse_position = GetMousePosition();
 
         fluid_attributes.frame_context.screen_mouse_pos = Vector2{static_cast<float>(mouse_position.x), static_cast<float>(mouse_position.y)};
         fluid_attributes.frame_context.world_mouse_pos = scene_renderer.screenToWorld(fluid_attributes.frame_context.screen_mouse_pos);
 
-        fluid_attributes.frame_context.dt = fluid_attributes.frame_context.setDT;
+        fluid_attributes.frame_context.dt = std::max(1e-3f, std::min(fluid_attributes.frame_context.trueDT, fluid_attributes.frame_context.setDT));
 
         track_key_events();
         track_mouse_events();
@@ -361,7 +360,7 @@ struct SceneHandler {
     void displayGUI() {
         // reset fps tracker every 20 frames
         if (frame == 0) {
-            fps = 1 / fluid_attributes.frame_context.trueDT;
+            fps = std::min(120.f, std::abs(1 / fluid_attributes.frame_context.trueDT));
             frame = 20;
         }
         frame--;

@@ -21,25 +21,25 @@ class TransferGrid {
     std::vector<float> Cu;
     std::vector<float> Cv;
 
-    FluidState &fluid_attributes;
+    FluidState &fas;
 
 public:
 
-    TransferGrid(FluidState &fas): fluid_attributes(fas) {
-        invSpacing =  1.f / fluid_attributes.cellSpacing;
-        halfSpacing = 0.5f * fluid_attributes.cellSpacing;
-        n = fluid_attributes.numY;
+    TransferGrid(FluidState &fluid_attributes): fas(fluid_attributes) {
+        invSpacing =  1.f / fas.cellSpacing;
+        halfSpacing = 0.5f * fas.cellSpacing;
+        n = fas.numY;
 
-        Cu.resize(2 * fluid_attributes.num_particles);
-        Cv.resize(2 * fluid_attributes.num_particles);
+        Cu.resize(2 * fas.num_particles);
+        Cv.resize(2 * fas.num_particles);
         std::fill(begin(Cu), end(Cu), 0.f);
         std::fill(begin(Cv), end(Cv), 0.f);
 
-        SOLID_CELL = fluid_attributes.SOLID;
-        FLUID_CELL = fluid_attributes.FLUID;
-        AIR_CELL = fluid_attributes.AIR;
+        SOLID_CELL = fas.SOLID;
+        FLUID_CELL = fas.FLUID;
+        AIR_CELL = fas.AIR;
 
-        volume = fluid_attributes.cellSpacing * fluid_attributes.cellSpacing;
+        volume = fas.cellSpacing * fas.cellSpacing;
         invVolume = 1.f / volume;
     }
 
@@ -48,13 +48,13 @@ public:
 
         P2G();
 
-        momentumToVelocityMulti();
+        MomentumToVelocity();
 
-        enforceNoSlipMulti();
+        NeumannBC();
 
         // store prev grid for FLIP
-        std::copy(std::begin(fluid_attributes.u), std::end(fluid_attributes.u), std::begin(fluid_attributes.prevU));
-        std::copy(std::begin(fluid_attributes.v), std::end(fluid_attributes.v), std::begin(fluid_attributes.prevV));
+        std::copy(std::begin(fas.u), std::end(fas.u), std::begin(fas.prevU));
+        std::copy(std::begin(fas.v), std::end(fas.v), std::begin(fas.prevV));
     }
 
     void TransferToParticles() {
@@ -68,97 +68,69 @@ public:
 
 private:
 
-    float Weight(float px, float py, float gx, float gy) {
-        gx *= fluid_attributes.cellSpacing;
-        gy *= fluid_attributes.cellSpacing;
-
-        float dx = 1.f - std::abs((px - gx)) * invSpacing;
-        float dy = 1.f - std::abs((py - gy)) * invSpacing;
-
-        return dx * dy;
-    }
-
-    void WeightGradientFD(float px, float py, float gx, float gy, float &gradX, float &gradY) {
-        float eps = fluid_attributes.cellSpacing * 0.001f;
-
-        gradX = (Weight(px, py + eps, gx, gy) - Weight(px, py - eps, gx, gy)) / (2 * eps);
-        gradY = (Weight(px + eps, py, gx, gy) - Weight(px - eps, py, gx, gy)) / (2 * eps);
-    }
-
-    void WeightGradient(float px, float py, float gx, float gy, float &gradx, float &grady) {
-        gx *= fluid_attributes.cellSpacing;
-        gy *= fluid_attributes.cellSpacing;
-
-        float dx = (px - gx) * invSpacing;
-        float dy = (py - gy) * invSpacing;
-
-        gradx = -sign(dx) * (1.f - abs(dy)) * invSpacing;
-        grady = -sign(dy) * (1.f - abs(dx)) * invSpacing;
-    }
-
     void SetUpTransferGrid() {
-        std::copy(std::begin(fluid_attributes.u), std::end(fluid_attributes.u), std::begin(fluid_attributes.prevU));
-        std::copy(std::begin(fluid_attributes.v), std::end(fluid_attributes.v), std::begin(fluid_attributes.prevV));
-        std::fill(begin(fluid_attributes.sumUGridWeights), end(fluid_attributes.sumUGridWeights), 0.f);
-        std::fill(begin(fluid_attributes.sumVGridWeights), end(fluid_attributes.sumVGridWeights), 0.f);
-        std::fill(begin(fluid_attributes.u), end(fluid_attributes.u), 0.f);
-        std::fill(begin(fluid_attributes.v), end(fluid_attributes.v), 0.f);
+        std::copy(std::begin(fas.u), std::end(fas.u), std::begin(fas.prevU));
+        std::copy(std::begin(fas.v), std::end(fas.v), std::begin(fas.prevV));
+        std::fill(begin(fas.sumUGridWeights), end(fas.sumUGridWeights), 0.f);
+        std::fill(begin(fas.sumVGridWeights), end(fas.sumVGridWeights), 0.f);
+        std::fill(begin(fas.u), end(fas.u), 0.f);
+        std::fill(begin(fas.v), end(fas.v), 0.f);
     }
 
     void P2G() {
         for (int component = 0; component < 2; ++component) {
-            auto &gridVel = component == 0 ? fluid_attributes.u : fluid_attributes.v;
-            auto &gridWeights = component == 0 ? fluid_attributes.sumUGridWeights : fluid_attributes.sumVGridWeights;
+            auto &gridVel = component == 0 ? fas.u : fas.v;
+            auto &gridWeights = component == 0 ? fas.sumUGridWeights : fas.sumVGridWeights;
             auto &C = component == 0 ? Cu : Cv;
 
-            for (int pIdx = 0; pIdx < fluid_attributes.num_particles; ++pIdx) {
+            for (int pIdx = 0; pIdx < fas.num_particles; ++pIdx) {
                 const int32_t i = 2 * pIdx;
 
-                float px = fluid_attributes.positions[i];
-                float py = fluid_attributes.positions[i + 1];
+                float px = fas.positions[i];
+                float py = fas.positions[i + 1];
 
                 px -= (component == 1) * halfSpacing;
                 py -= (component == 0) * halfSpacing;
 
-                px = clamp(px, fluid_attributes.cellSpacing, (fluid_attributes.numX - 1) * fluid_attributes.cellSpacing);
-                py = clamp(py, fluid_attributes.cellSpacing, (fluid_attributes.numY - 1) * fluid_attributes.cellSpacing);
+                px = clamp(px, fas.cellSpacing, (fas.numX - 1) * fas.cellSpacing);
+                py = clamp(py, fas.cellSpacing, (fas.numY - 1) * fas.cellSpacing);
 
                 int x0, x1, y0, y1;
                 x0 = x1 = y0 = y1 = 0;
 
-                fluid_attributes.GetStaggeredGridPositions(px, py, x0, x1, y0, y1, component);
+                fas.GetStaggeredGridPositions(px, py, x0, x1, y0, y1, component);
 
                 int32_t topLeftCell     = x0 * n + y0;
                 int32_t topRightCell    = x1 * n + y0;
                 int32_t bottomLeftCell  = x0 * n + y1;
                 int32_t bottomRightCell = x1 * n + y1;
 
-                float topLeftWeight     = Weight(px, py, x0, y0);
-                float topRightWeight    = Weight(px, py, x1, y0);
-                float bottomLeftWeight  = Weight(px, py, x0, y1);
-                float bottomRightWeight = Weight(px, py, x1, y1);
+                float topLeftWeight     = fas.Weight(px, py, x0, y0);
+                float topRightWeight    = fas.Weight(px, py, x1, y0);
+                float bottomLeftWeight  = fas.Weight(px, py, x0, y1);
+                float bottomRightWeight = fas.Weight(px, py, x1, y1);
 
-                float dxLeft   = -(px - x0 * fluid_attributes.cellSpacing) * invSpacing;
-                float dyTop    = -(py - y0 * fluid_attributes.cellSpacing) * invSpacing;
-                float dxRight  = 1.f - abs(dxLeft);
-                float dyBottom = 1.f - abs(dyTop);
+                float dxLeft   = (x0 * fas.cellSpacing - px) * invSpacing;
+                float dyTop    = (y0 * fas.cellSpacing - py) * invSpacing;
+                float dxRight  = (x1 * fas.cellSpacing - px) * invSpacing;
+                float dyBottom = (y1 * fas.cellSpacing - py) * invSpacing;
 
-                float pv = fluid_attributes.velocities[i + component];
+                float pv = fas.velocities[i + component];
 
                 int matIdx = 2 * pIdx;
 
                 float C1 = C[matIdx];
                 float C2 = C[matIdx + 1];
 
-                float affinepvxBottomLeft = pv + 
+                float affinepvBottomLeft = pv + 
                                         C1 * dxLeft + 
                                         C2 * dyBottom;
 
-                float affinepvxBottomRight = pv + 
+                float affinepvBottomRight = pv + 
                                         C1 * dxRight + 
                                         C2 * dyBottom;
 
-                float affinepvxTopLeft = pv + 
+                float affinepvTopLeft = pv + 
                                         C1 * dxLeft + 
                                         C2 * dyTop;
 
@@ -166,10 +138,10 @@ private:
                                         C1 * dxRight + 
                                         C2 * dyTop;
             
-                gridVel[topLeftCell]     += affinepvxTopLeft     * topLeftWeight;
-                gridVel[topRightCell]    += affinepvTopRight     * topRightWeight;
-                gridVel[bottomLeftCell]  += affinepvxBottomLeft  * bottomLeftWeight;
-                gridVel[bottomRightCell] += affinepvxBottomRight * bottomRightWeight;
+                gridVel[topLeftCell]     += affinepvTopLeft     * topLeftWeight;
+                gridVel[topRightCell]    += affinepvTopRight    * topRightWeight;
+                gridVel[bottomLeftCell]  += affinepvBottomLeft  * bottomLeftWeight;
+                gridVel[bottomRightCell] += affinepvBottomRight * bottomRightWeight;
 
                 //grid[topLeftCell]     += pv * topLeftWeight;
                 //grid[topRightCell]    += pv * topRightWeight;
@@ -184,56 +156,48 @@ private:
         }
     }
 
-    void momentumToVelocity(int start, int end) {
-        for (int i = start; i < end; ++i) {
-            float prevNode = fluid_attributes.sumUGridWeights[i];
+    void MomentumToVelocity() {
+        for (int i = 0; i < fas.gridSize; ++i) {
+            float prevNode = fas.sumUGridWeights[i];
             if (prevNode > 0.f) {
-                fluid_attributes.u[i] /= prevNode;
+                fas.u[i] /= prevNode;
             }
-            prevNode = fluid_attributes.sumVGridWeights[i];
+            prevNode = fas.sumVGridWeights[i];
             if (prevNode > 0.f) {
-                fluid_attributes.v[i] /= prevNode;
+                fas.v[i] /= prevNode;
             }
         }
     }
 
-    void momentumToVelocityMulti() {
-        momentumToVelocity(0, fluid_attributes.gridSize);
-    }
-
-    void enforceNoSlip(int start, int end) {
-        for (int i = start; i < end; ++i) {
-            for (int j = 0; j < fluid_attributes.numY; ++j) {
+    void NeumannBC() {
+        for (int i = 0; i < fas.numX; ++i) {
+            for (int j = 0; j < fas.numY; ++j) {
                 int idx = i * n + j;
-                bool solid = fluid_attributes.cellType[idx] == SOLID_CELL;
-                if (solid || (i > 0 && fluid_attributes.cellType[idx - n] == SOLID_CELL)) {
-                    fluid_attributes.u[idx] = 0;
+                bool solid = fas.cellType[idx] == SOLID_CELL;
+                if (solid || (i > 0 && fas.cellType[idx - n] == SOLID_CELL)) {
+                    fas.u[idx] = 0;
                 }
-                if (solid || (j > 0 && fluid_attributes.cellType[idx - 1] == SOLID_CELL)) {
-                    fluid_attributes.v[idx] = 0;
+                if (solid || (j > 0 && fas.cellType[idx - 1] == SOLID_CELL)) {
+                    fas.v[idx] = 0;
                 }
             }
         }
-    }
-
-    void enforceNoSlipMulti() {
-        enforceNoSlip(0, fluid_attributes.numX - 1);
     }
 
     void G2P() {
         for (int component = 0; component < 2; ++component) {
-            auto &grid = component == 0 ? fluid_attributes.u : fluid_attributes.v;
-            auto &prevGrid = component == 0 ? fluid_attributes.prevU : fluid_attributes.prevV;
+            auto &grid = component == 0 ? fas.u : fas.v;
+            auto &prevGrid = component == 0 ? fas.prevU : fas.prevV;
             auto &C = component == 0 ? Cu : Cv;
 
-            for (int32_t pIdx = 0; pIdx < fluid_attributes.num_particles; ++pIdx) {
+            for (int32_t pIdx = 0; pIdx < fas.num_particles; ++pIdx) {
                 int i = 2 * pIdx;
 
-                float px = fluid_attributes.positions[i];
-                float py = fluid_attributes.positions[i + 1];
+                float px = fas.positions[i];
+                float py = fas.positions[i + 1];
 
-                px = clamp(px, fluid_attributes.cellSpacing, (fluid_attributes.numX - 1) * fluid_attributes.cellSpacing);
-                py = clamp(py, fluid_attributes.cellSpacing, (fluid_attributes.numY - 1) * fluid_attributes.cellSpacing);
+                px = clamp(px, fas.cellSpacing, (fas.numX - 1) * fas.cellSpacing);
+                py = clamp(py, fas.cellSpacing, (fas.numY - 1) * fas.cellSpacing);
 
                 px -= (component == 1) * halfSpacing;
                 py -= (component == 0) * halfSpacing;
@@ -241,19 +205,19 @@ private:
                 int x0, x1, y0, y1;
                 x0 = x1 = y0 = y1 = 0;
 
-                fluid_attributes.GetStaggeredGridPositions(px, py, x0, x1, y0, y1, component);
+                fas.GetStaggeredGridPositions(px, py, x0, x1, y0, y1, component);
 
                 int32_t topLeftCell     = x0 * n + y0;
                 int32_t topRightCell    = x1 * n + y0;
                 int32_t bottomLeftCell  = x0 * n + y1;
                 int32_t bottomRightCell = x1 * n + y1;
 
-                float topLeftWeight     = Weight(px, py, x0, y0);
-                float topRightWeight    = Weight(px, py, x1, y0);
-                float bottomLeftWeight  = Weight(px, py, x0, y1);
-                float bottomRightWeight = Weight(px, py, x1, y1);
+                float topLeftWeight     = fas.Weight(px, py, x0, y0);
+                float topRightWeight    = fas.Weight(px, py, x1, y0);
+                float bottomLeftWeight  = fas.Weight(px, py, x0, y1);
+                float bottomRightWeight = fas.Weight(px, py, x1, y1);
 
-                float pv = fluid_attributes.velocities[i + component];
+                float pv = fas.velocities[i + component];
 
                 float gridVel_topLeft     = grid[topLeftCell];
                 float gridVel_topRight    = grid[topRightCell];
@@ -261,14 +225,14 @@ private:
                 float gridVel_bottomLeft  = grid[bottomLeftCell];
             
                 int direction = component == 0 ? n : 1;
-                const bool validTopLeftWeight     = fluid_attributes.cellType[topLeftCell]                 != AIR_CELL || 
-                                                    fluid_attributes.cellType[topLeftCell - direction]     != AIR_CELL;
-                const bool validTopRightWeight    = fluid_attributes.cellType[topRightCell]                != AIR_CELL || 
-                                                    fluid_attributes.cellType[topRightCell - direction]    != AIR_CELL;
-                const bool validBottomLeftWeight  = fluid_attributes.cellType[bottomLeftCell]              != AIR_CELL || 
-                                                    fluid_attributes.cellType[bottomLeftCell - direction]  != AIR_CELL;
-                const bool validBottomRightWeight = fluid_attributes.cellType[bottomRightCell]             != AIR_CELL || 
-                                                    fluid_attributes.cellType[bottomRightCell - direction] != AIR_CELL;
+                const bool validTopLeftWeight     = fas.cellType[topLeftCell]                 != AIR_CELL || 
+                                                    fas.cellType[topLeftCell - direction]     != AIR_CELL;
+                const bool validTopRightWeight    = fas.cellType[topRightCell]                != AIR_CELL || 
+                                                    fas.cellType[topRightCell - direction]    != AIR_CELL;
+                const bool validBottomLeftWeight  = fas.cellType[bottomLeftCell]              != AIR_CELL || 
+                                                    fas.cellType[bottomLeftCell - direction]  != AIR_CELL;
+                const bool validBottomRightWeight = fas.cellType[bottomRightCell]             != AIR_CELL || 
+                                                    fas.cellType[bottomRightCell - direction] != AIR_CELL;
 
                 const float div =  validTopLeftWeight     * topLeftWeight + 
                                    validTopRightWeight    * topRightWeight + 
@@ -293,44 +257,44 @@ private:
                             ) / div;
 
                     flipV = pv + corr;
-                    fluid_attributes.velocities[i + component] = (1.f - fluid_attributes.flipRatio) * picV + fluid_attributes.flipRatio * flipV;
+                    fas.velocities[i + component] = (1.f - fas.flipRatio) * picV + fas.flipRatio * flipV;
                 }
 
-                const bool validTopLeftWeightX     = fluid_attributes.cellType[topLeftCell]         != AIR_CELL || 
-                                                     fluid_attributes.cellType[topLeftCell - n]     != AIR_CELL;
-                const bool validTopRightWeightX    = fluid_attributes.cellType[topRightCell]        != AIR_CELL || 
-                                                     fluid_attributes.cellType[topRightCell - n]    != AIR_CELL;
-                const bool validBottomLeftWeightX  = fluid_attributes.cellType[bottomLeftCell]      != AIR_CELL || 
-                                                     fluid_attributes.cellType[bottomLeftCell - n]  != AIR_CELL;
-                const bool validBottomRightWeightX = fluid_attributes.cellType[bottomRightCell]      != AIR_CELL || 
-                                                     fluid_attributes.cellType[bottomRightCell - n] != AIR_CELL;
+                const bool validTopLeftWeightX     = fas.cellType[topLeftCell]         != AIR_CELL || 
+                                                     fas.cellType[topLeftCell - n]     != AIR_CELL;
+                const bool validTopRightWeightX    = fas.cellType[topRightCell]        != AIR_CELL || 
+                                                     fas.cellType[topRightCell - n]    != AIR_CELL;
+                const bool validBottomLeftWeightX  = fas.cellType[bottomLeftCell]      != AIR_CELL || 
+                                                     fas.cellType[bottomLeftCell - n]  != AIR_CELL;
+                const bool validBottomRightWeightX = fas.cellType[bottomRightCell]      != AIR_CELL || 
+                                                     fas.cellType[bottomRightCell - n] != AIR_CELL;
 
-                const bool validTopLeftWeightY     = fluid_attributes.cellType[topLeftCell]         != AIR_CELL || 
-                                                     fluid_attributes.cellType[topLeftCell - 1]     != AIR_CELL;
-                const bool validTopRightWeightY    = fluid_attributes.cellType[topRightCell]        != AIR_CELL || 
-                                                     fluid_attributes.cellType[topRightCell - 1]    != AIR_CELL;
-                const bool validBottomLeftWeightY  = fluid_attributes.cellType[bottomLeftCell]      != AIR_CELL || 
-                                                     fluid_attributes.cellType[bottomLeftCell - 1]  != AIR_CELL;
-                const bool validBottomRightWeightY = fluid_attributes.cellType[bottomRightCell]     != AIR_CELL || 
-                                                     fluid_attributes.cellType[bottomRightCell - 1] != AIR_CELL;
+                const bool validTopLeftWeightY     = fas.cellType[topLeftCell]         != AIR_CELL || 
+                                                     fas.cellType[topLeftCell - 1]     != AIR_CELL;
+                const bool validTopRightWeightY    = fas.cellType[topRightCell]        != AIR_CELL || 
+                                                     fas.cellType[topRightCell - 1]    != AIR_CELL;
+                const bool validBottomLeftWeightY  = fas.cellType[bottomLeftCell]      != AIR_CELL || 
+                                                     fas.cellType[bottomLeftCell - 1]  != AIR_CELL;
+                const bool validBottomRightWeightY = fas.cellType[bottomRightCell]     != AIR_CELL || 
+                                                     fas.cellType[bottomRightCell - 1] != AIR_CELL;
 
-                float gridVelX_topLeft     = validTopLeftWeightX     * fluid_attributes.u[topLeftCell];
-                float gridVelX_topRight    = validTopRightWeightX    * fluid_attributes.u[topRightCell];
-                float gridVelX_bottomLeft  = validBottomLeftWeightX  * fluid_attributes.u[bottomLeftCell];
-                float gridVelX_bottomRight = validBottomRightWeightX * fluid_attributes.u[bottomRightCell];
+                float gridVelX_topLeft     = validTopLeftWeightX     * fas.u[topLeftCell];
+                float gridVelX_topRight    = validTopRightWeightX    * fas.u[topRightCell];
+                float gridVelX_bottomLeft  = validBottomLeftWeightX  * fas.u[bottomLeftCell];
+                float gridVelX_bottomRight = validBottomRightWeightX * fas.u[bottomRightCell];
 
-                float gridVelY_topLeft     = validTopLeftWeightY     * fluid_attributes.v[topLeftCell];
-                float gridVelY_topRight    = validTopRightWeightY    * fluid_attributes.v[topRightCell];
-                float gridVelY_bottomLeft  = validBottomLeftWeightY  * fluid_attributes.v[bottomLeftCell];
-                float gridVelY_bottomRight = validBottomRightWeightY * fluid_attributes.v[bottomRightCell];
+                float gridVelY_topLeft     = validTopLeftWeightY     * fas.v[topLeftCell];
+                float gridVelY_topRight    = validTopRightWeightY    * fas.v[topRightCell];
+                float gridVelY_bottomLeft  = validBottomLeftWeightY  * fas.v[bottomLeftCell];
+                float gridVelY_bottomRight = validBottomRightWeightY * fas.v[bottomRightCell];
 
                 float topLeftWeightDerivativeX, topRightWeightDerivativeX, bottomLeftWeightDerivativeX, bottomRightWeightDerivativeX;
                 float topLeftWeightDerivativeY, topRightWeightDerivativeY, bottomLeftWeightDerivativeY, bottomRightWeightDerivativeY;
 
-                WeightGradient(px, py, x0, y0, topLeftWeightDerivativeX, topLeftWeightDerivativeY);
-                WeightGradient(px, py, x1, y0, topRightWeightDerivativeX, topRightWeightDerivativeY);
-                WeightGradient(px, py, x0, y1, bottomLeftWeightDerivativeX, bottomLeftWeightDerivativeY);
-                WeightGradient(px, py, x1, y1, bottomRightWeightDerivativeX, bottomRightWeightDerivativeY);
+                fas.WeightGradientFD(px, py, x0, y0, topLeftWeightDerivativeX, topLeftWeightDerivativeY);
+                fas.WeightGradientFD(px, py, x1, y0, topRightWeightDerivativeX, topRightWeightDerivativeY);
+                fas.WeightGradientFD(px, py, x0, y1, bottomLeftWeightDerivativeX, bottomLeftWeightDerivativeY);
+                fas.WeightGradientFD(px, py, x1, y1, bottomRightWeightDerivativeX, bottomRightWeightDerivativeY);
 
                 C[i] = (topLeftWeightDerivativeX    * gridVelX_topLeft +
                        topRightWeightDerivativeX    * gridVelX_topRight +
@@ -341,6 +305,46 @@ private:
                            topRightWeightDerivativeY    * gridVelY_topRight +
                            bottomLeftWeightDerivativeY  * gridVelY_bottomLeft +
                            bottomRightWeightDerivativeY * gridVelY_bottomRight);
+
+                /*if (pIdx == 35) {
+                    std::cout << "Top Left: ";
+
+                    float gradXTopLeft;
+                    float gradYTopLeft;
+
+                    WeightGradientFD(px, py, x0, y0, gradXTopLeft, gradYTopLeft);
+
+                    std::cout << topLeftWeightDerivativeX << ", " << gradXTopLeft << ", " << topLeftWeightDerivativeY << ", " << gradYTopLeft << "\n";
+
+
+                    std::cout << "Top Right: ";
+
+                    float gradXTopRight;
+                    float gradYTopRight;
+
+                    WeightGradientFD(px, py, x0, y0, gradXTopRight, gradYTopRight);
+
+                    std::cout << topRightWeightDerivativeX << ", " << gradXTopRight << ", " << topRightWeightDerivativeY << ", " << gradYTopRight << "\n";
+
+
+                    std::cout << "Bottom Left: ";
+
+                    float gradXBottomLeft;
+                    float gradYBottomLeft;
+
+                    WeightGradientFD(px, py, x0, y0, gradXBottomLeft, gradYBottomLeft);
+
+                    std::cout << bottomLeftWeightDerivativeX << ", " << gradXBottomLeft << ", " << bottomLeftWeightDerivativeY << ", " << gradYBottomLeft << "\n";
+
+                    std::cout << "Bottom Right: ";
+
+                    float gradXBottomRight;
+                    float gradYBottomRight;
+
+                    WeightGradientFD(px, py, x0, y0, gradXBottomRight, gradYBottomRight);
+
+                    std::cout << bottomRightWeightDerivativeX << ", " << gradXBottomRight << ", " << bottomRightWeightDerivativeY << ", " << gradYBottomRight << "\n";
+                }*/
             }
         }
     }

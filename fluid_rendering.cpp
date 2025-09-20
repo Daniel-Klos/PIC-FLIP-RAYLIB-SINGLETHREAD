@@ -243,12 +243,12 @@ void FluidRenderer::GetParticleDensityColor(int particleIdx, int &r, int &g, int
     int cellY = fluid_attributes.positions[2 * particleIdx + 1] / fluid_attributes.cellSpacing;
 
     // normal
-    //int densityIdx = static_cast<int>(fluid_attributes.cellDensities[cellX * fluid_attributes.n + cellY]) * 25;
+    int densityIdx = static_cast<int>(fluid_attributes.cellDensities[cellX * fluid_attributes.n + cellY]) * 25;
 
     // density projection
-    int halfIdx = densityGradient.size() / 2;
-    int offset = 1.f - fluid_attributes.cellDensities[cellX * fluid_attributes.n + cellY];
-    int densityIdx = halfIdx - offset * 25;
+    //int halfIdx = densityGradient.size() / 2;
+    //int offset = 1.f - fluid_attributes.cellDensities[cellX * fluid_attributes.n + cellY];
+    //int densityIdx = halfIdx - offset * 25;
 
     int idx = clamp(densityIdx, 0, densityGradient.size() - 1);
 
